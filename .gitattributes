@@ -1,0 +1,14 @@
+# Same bytes on every machine, so hooks, the packager, and the runner agree.
+* text=auto eol=lf
+*.cs text eol=lf
+*.cslist text eol=lf
+*.ps1 text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.shader text eol=lf
+*.compute text eol=lf
+tools/hooks/* text eol=lf
+*.assetbundle binary
+*.zip binary
+*.var binary

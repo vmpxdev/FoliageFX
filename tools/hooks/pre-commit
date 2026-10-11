@@ -1,0 +1,27 @@
+#!/bin/sh
+# Every commit lints and compiles against VaM. A commit that does not compile never happens.
+# A commit that touches shader/ also gets its bundle: when FoliageFX.assetbundle is out of
+# date with the shaders, Unity 2018.1.9f1 rebuilds it in batch mode (tools/bundle.ps1) and
+# the bundle and shader/bundle.sources are staged with the commit. Without Unity here,
+# such a commit is refused instead.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+# pwsh: on PATH, else the standard install folder (an editor launched before
+# PowerShell 7 was installed can carry a stale PATH).
+PWSH=$(command -v pwsh 2>/dev/null)
+[ -z "$PWSH" ] && [ -x "/c/Program Files/PowerShell/7/pwsh.exe" ] && PWSH="/c/Program Files/PowerShell/7/pwsh.exe"
+[ -z "$PWSH" ] && { echo "hook: pwsh not found; install PowerShell 7" >&2; exit 1; }
+"$PWSH" -NoProfile -File tools/compile.ps1 || exit 1
+
+if git diff --cached --name-only -- shader FoliageFX.assetbundle | grep -q .; then
+    "$PWSH" -NoProfile -File tools/bundle.ps1 -Check -Quiet
+    case $? in
+        0) ;;
+        3)
+            echo "hook: shader/ changed; building FoliageFX.assetbundle with Unity"
+            "$PWSH" -NoProfile -File tools/bundle.ps1 || exit 1
+            git add FoliageFX.assetbundle shader/bundle.sources || exit 1
+            echo "hook: FoliageFX.assetbundle and shader/bundle.sources rebuilt and staged with this commit" ;;
+        *) exit 1 ;;
+    esac
+fi
+exit 0

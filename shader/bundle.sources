@@ -1,0 +1,4 @@
+# Written by tools/bundle.ps1: what FoliageFX.assetbundle was built from. Not edited by hand: rebuild, or -Record after a build in the editor.
+207491bb24ca4b672bc15b32eac71ccbe119c4c7c294614686e181b726140c0d  Editor_BuildFoliageFXBundle.cs
+6ddafe2c3efcb43260a179a858ea7d35bfb8e9e136678167dcbfa4c65758da7a  Leaves.shader
+762a7f8464fe1f59b0b4a28873b8b3e911466032ca706c5561dec27840998365  FoliageFX.assetbundle

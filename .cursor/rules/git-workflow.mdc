@@ -1,0 +1,16 @@
+---
+description: Branches, tags, and who commits
+alwaysApply: true
+---
+
+# Git
+
+Work on **main**. Tags `v1`, `v2`, `v3` are releases; the tag number is the var number.
+A hotfix for a released version branches from its tag, tags the next number there, and
+merges back. No other branches unless the user names one in that message.
+
+The user commits and tags. Do not commit, stage, or tag unless asked. A commit message
+covers only what is uncommitted since the last commit; check `git status` and `git log`
+before writing one. The pre-commit hook lints and compiles, and when the commit touches `shader/` it rebuilds
+the bundle with Unity and stages `FoliageFX.assetbundle` and `shader/bundle.sources` with it;
+the pre-push hook packages.

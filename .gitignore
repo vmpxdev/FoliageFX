@@ -1,0 +1,17 @@
+# Everything that is the project is tracked (sources, shaders, docs, tools,
+# packaging). The packager chooses what ships; git does not.
+
+# Build output and local state
+dist/
+build.json
+FoliageFX.zip
+*.check.dll
+tools/Strip/bin/
+tools/Strip/obj/
+tools/unity.local.json
+
+# Editors and OS
+.vs/
+.idea/
+Thumbs.db
+.DS_Store

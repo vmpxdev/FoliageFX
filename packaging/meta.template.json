@@ -1,0 +1,17 @@
+{
+  "licenseType": "PC",
+  "creatorName": "Vampix Collections",
+  "packageName": "FoliageFX",
+  "standardReferenceVersionOption": "Latest",
+  "scriptReferenceVersionOption": "Exact",
+  "description": "",
+  "credits": "",
+  "instructions": "Plugins > Add Plugin > this package > FoliageFX.cslist, on any atom or under Session Plugins. On a CustomUnityAsset it looks after that one; anywhere else, every CustomUnityAsset without its own FoliageFX. Show Hints explains each setting.",
+  "promotionalLink": "https://www.patreon.com/VampixCollections",
+  "programVersion": "1.22.0.13",
+  "contentList": [],
+  "dependencies": {},
+  "customOptions": {},
+  "hadReferenceIssues": "false",
+  "referenceIssues": []
+}

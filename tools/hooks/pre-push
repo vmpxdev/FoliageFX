@@ -1,0 +1,14 @@
+#!/bin/sh
+# Before a push: build the var into a temp folder, which strips the comments and
+# compiles the stripped sources. GitHub packages the same sources but cannot compile.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+# pwsh: on PATH, else the standard install folder (an editor launched before
+# PowerShell 7 was installed can carry a stale PATH).
+PWSH=$(command -v pwsh 2>/dev/null)
+[ -z "$PWSH" ] && [ -x "/c/Program Files/PowerShell/7/pwsh.exe" ] && PWSH="/c/Program Files/PowerShell/7/pwsh.exe"
+[ -z "$PWSH" ] && { echo "hook: pwsh not found; install PowerShell 7" >&2; exit 1; }
+tmp="${TMPDIR:-${TEMP:-/tmp}}/foliagefx-prepush"
+"$PWSH" -NoProfile -File tools/pack.ps1 -Out "$tmp" -Quiet
+code=$?
+rm -rf "$tmp"
+exit $code

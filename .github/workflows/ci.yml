@@ -1,0 +1,54 @@
+# Every push: lint, package, check the var, keep it as an artifact.
+# Every v<N> tag: the same, then a release draft with the var and the notes.
+# The runner has no VaM, so it never compiles; the pre-commit and pre-push
+# hooks on the developer's machine are where compiling happens.
+name: CI
+
+# The release draft needs write access to the repository (the token defaults
+# to read-only on new repositories); the artifact upload needs nothing more.
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v[0-9]*"]
+  pull_request:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # tags, for the next-version number of dev builds
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Lint
+        shell: pwsh
+        run: ./tools/lint.ps1
+
+      - name: Package
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") { ./tools/pack.ps1 -Tag $env:GITHUB_REF_NAME -NoCompile }
+          else { ./tools/pack.ps1 -NoCompile }
+
+      - name: Keep the var
+        uses: actions/upload-artifact@v5
+        with:
+          name: FoliageFX-var
+          path: dist/*.var
+          if-no-files-found: error
+
+      - name: Release draft
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: FoliageFX ${{ github.ref_name }}
+          body_path: dist/notes.md
+          files: dist/*.var

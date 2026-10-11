@@ -1,0 +1,27 @@
+---
+description: FoliageFX product identity and how to work in this repo
+alwaysApply: true
+---
+
+# FoliageFX
+
+Virt-A-Mate plugin: tree and plant CustomUnityAssets whose leaves never receive shadows get
+a copy on a cutout leaf shader that casts and receives them, with recolouring, a wind sway,
+and falling leaves cut from each tree's own texture. Product **FoliageFX** (Vampix
+Collections). Class `FoliageFX`. Load `FoliageFX.cslist` on any atom or as a session
+plugin. Facade is `Types/FoliageFX.cs`, last in the cslist. First release in preparation.
+
+Read `docs/ARCHITECTURE.md` before adding a class, `docs/UI_DESIGN.md` before adding a control
+or writing user-facing text, `docs/PLAN.md` for what is in and out of scope, `README.md` for the
+build and release pipeline.
+
+- Every effect follows the contract: `Create(ParamSet)`, `ApplyTree(Tree, ...)` or
+  `Apply(LeafMaterial)`, `Release(LeafMaterial)`, `State`, `Describe`. UI in the page class
+  for its tab.
+- New steps go into `Lifecycle.Update` in the documented order, nowhere else.
+- The asset's own materials are never edited: a copy goes into the renderer slots, and the
+  source comes back on every exit path.
+- Off is identical to no plugin. A FoliageFX on the atom itself wins.
+- Settings save with the scene only. No presets.
+- Original code only. Do not paste decompiled VaM source.
+- Speak in VaM terms in every user-facing string: atoms, CustomUnityAssets, session plugins.

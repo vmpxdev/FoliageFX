@@ -1,0 +1,30 @@
+---
+description: Hot-path rules for FoliageFX
+globs: "**/*.cs"
+alwaysApply: false
+---
+
+# Performance
+
+Targets: once every tree is applied, a frame that only compares a dozen effect values with
+the ones last applied (the sway is the shader's, the falling leaves are Unity's particle
+systems), a scan every 2 s (`SceneScanSeconds`), an edit re-applies one tree, 0 B/frame. Measured with Technical Info on: the Overview's cost caption (average and
+peak) and each inspector's cost.
+
+- Zero allocation per frame. The tree editor's callbacks and that per-frame comparison set
+  dirty flags (the effects' storables carry no callbacks); the tree pass does the work, for
+  dirty trees only. Each guarded step's delegate is built once in `Lifecycle`, never at the
+  call site.
+- An edit in the tree editor touches one tree (`Lifecycle.Touch`); every tree is applied
+  again only for a change in an effect's values or MSAA, the leaf shader arriving, the
+  master or the plugin switched back on, an effect's reset or a scene restore (both
+  `TouchAll`), or Rescan.
+- Re-applying a tree writes material properties; a copy is made or dropped only when a
+  material's kind changes.
+- Leaf shapes are extracted once per source texture, as a coroutine that yields between
+  steps, shared by every material on it; the texture is read at most `AtlasReadSize` on a
+  side. Never per frame, never per material.
+- The scan walks the atom list and checks precedence; a tree's renderers are read only
+  when they are stale (`Tree.NeedsGather`), not every time it is dirty.
+- Build UI strings only when the page is visible and the text changed, on the slow tick
+  (`UiRefreshSeconds`).

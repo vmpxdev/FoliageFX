@@ -1,0 +1,26 @@
+---
+description: Error handling for FoliageFX
+globs: "**/*.cs"
+alwaysApply: false
+---
+
+# Error handling
+
+Every failure needs a specific status string. No raw `try/catch` at call sites; go through
+`OverlayLog`.
+
+- User actions (the editor's buttons, a row's switch, Rescan, Diagnose): `log.Run("what",
+  fn)` reports every failure.
+- Hot paths (`Update`, each step of the tree pass): `log.RunOnce` so a stuck throw cannot
+  flood the log. A step that throws is reported once; the pass carries on.
+- Recoverable: `log.RunWarn`. Optional API probes: `OverlayLog.Probe` (a throw means
+  "not available").
+- UI clicks go through `UiKit.Wire`. Storable callbacks that reach scene or effect code
+  wrap their body in `log.Run` / `RunWarn`. The sprite coroutine keeps the work between
+  yields inside a boundary; a leaf-shape job that has not answered within
+  `SpriteJobTimeoutSeconds` (15 s) is dropped and started again on the next scan tick
+  (`FallingLeaves.Tick`).
+- A tree whose asset is still loading reads "loading", and the leaf shader still loading
+  reads "Loading the leaf shader": states, never errors.
+- Do not rewrite status every frame; describe on scan, change, and user actions.
+- Restore owned state on every exit path, including the catch path.

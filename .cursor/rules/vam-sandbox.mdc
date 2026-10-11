@@ -1,0 +1,35 @@
+---
+description: VaM DynamicCSharp sandbox and API constraints
+alwaysApply: true
+---
+
+# VaM plugin sandbox
+
+VaM compiles this script in a sandbox. Breaking these rules fails compile or crashes VaM.
+`tools/lint.ps1` checks them; `tools/compile.ps1` runs lint then a C# 5 compile against the
+local VaM assemblies. Run it before every in-game test.
+
+- **No `System.IO`**, not even in comments. No `WWW`. Use `FileManagerSecure` for files.
+- **No `enum`.** VaM's compiler hard-crashes the process. String or int constants in
+  `FoliageFXConfig`.
+- No `interface`, no generic method definitions, no `static class`, no XML `see cref`,
+  no `namespace`, no `public` type other than `FoliageFX`. Sealed classes with static
+  members are fine.
+- **No `foreach` over a `Dictionary`**: its keys, its values or its pairs (the compiler
+  crashes; the prototype hit it on `Dictionary.Values`). The lint refuses `.Keys` and
+  `.Values` in a `foreach`, and a `foreach` over any `KeyValuePair<` but
+  `KeyValuePair<string, JSONNode>`, which is how a `JSONClass` is iterated:
+  `foreach (KeyValuePair<string, JSONNode> kv in node)`. Indexed `for` loops over `List`s
+  or arrays.
+- C# 5 only: no string interpolation, `nameof`, null-conditional, expression-bodied
+  members, `using static`.
+- Load on any atom or as a session plugin, where there is no containing atom; guard
+  `containingAtom` for null, and check its type before treating it as a tree.
+- Reach a tree's materials through its `CustomUnityAssetLoader`'s renderers, slot by slot;
+  never write to a source material.
+- Discover shader properties with `material.HasProperty` at runtime.
+- `UnityEngine.ParticleSystemModule` is referenced; particles are fine.
+- Restore original state on disable, destroy, master off, effect off, atom gone, asset
+  change, and error.
+- `JSONStorable*` registered through `ParamSet` for anything that must save with the scene;
+  per-tree switches and looks go through `TreeLooks`.

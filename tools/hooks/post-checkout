@@ -1,0 +1,9 @@
+#!/bin/sh
+cd "$(git rev-parse --show-toplevel)" || exit 0
+# pwsh: on PATH, else the standard install folder (an editor launched before
+# PowerShell 7 was installed can carry a stale PATH).
+PWSH=$(command -v pwsh 2>/dev/null)
+[ -z "$PWSH" ] && [ -x "/c/Program Files/PowerShell/7/pwsh.exe" ] && PWSH="/c/Program Files/PowerShell/7/pwsh.exe"
+[ -z "$PWSH" ] && { echo "hook: pwsh not found; install PowerShell 7" >&2; exit 1; }
+"$PWSH" -NoProfile -File tools/build-info.ps1 >/dev/null 2>&1
+exit 0

@@ -1,0 +1,34 @@
+---
+description: Layers, ownership, frame order, and patterns for FoliageFX
+alwaysApply: true
+---
+
+# Architecture
+
+`docs/ARCHITECTURE.md` is the source of truth. Summary:
+
+- Layers: Core, Scene, Effects, Ui. Dependencies point downward, and Scene holds one thing
+  of the Effects: what they own on a material (`LeafMaterial.Copy`, `FallingMaterial`,
+  `Emitter`, fields those effects set and clear). `Lifecycle` (Core) is the one class that
+  calls Scene and Effects. Effects never reference each other: Falling
+  Leaves gets Wind's values as arguments from `Lifecycle`.
+- Ownership: `LeafMaterial` owns the renderer slots and the restore; `ShadowFix` owns the
+  copy; `FallingLeaves` owns the emitter, the leaf material and the sprite jobs (one per
+  source texture, shared); `LeafShader` owns the bundle. `TreeRegistry` calls each effect's
+  `Release(LeafMaterial)` before a tree is released.
+- Frame order in `Lifecycle.Update`: every frame compare the effects' switches and sliders
+  with the values last applied (a dozen comparisons, no allocation; their storables carry
+  no callbacks) and check the leaf shader reference; every `SceneScanSeconds` scan the
+  trees, read MSAA, retry stalled leaf-shape jobs (`FallingLeaves.Tick`); then for each
+  dirty tree gather it first when its renderers are stale (`Tree.NeedsGather`), then
+  `ShadowFix.ApplyTree`, `Wind.Apply` per material, `FallingLeaves.ApplyTree`. Each step
+  in `log.RunOnce`, timed. Once every tree is applied a frame does the comparisons and
+  nothing else.
+- Patterns: Facade, RAII ownership, Observer via dirty flags, Command for Reset and Copy.
+  No DI container, no event bus, no reflection wiring.
+- Every storable is registered through `ParamSet` with a feature id, a scope (Look, Scene,
+  Ui, Volatile, plus the Private flag), and a stable key. The scene carries Look, Scene and
+  Ui in one block beside the `trees` node; `Settings` migrates by schema number (renames
+  and rewrites only).
+- Save keys are the schema and never change. Storable names are `<Feature> <Param>
+  <unit>` and may change (Timeline references break, saves do not).
