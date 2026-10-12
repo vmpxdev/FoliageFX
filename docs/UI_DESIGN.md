@@ -44,7 +44,7 @@ The Trees page:
 | +-- Atoms -------------------------+  | [x] Enabled                 (accent)  |  the tree's switch
 | | [Sakura 1  ]  3 of 5 conv.   [x] |  | Status: 3 of 5 converted              |  live caption (top)
 | | [Sakura 2  ]  nothing to fix [x] |  | Asset: Sakura_Tree                    |  the asset, as it is named
-| | [Ancient   ]  own FoliageFX !    |  | Leaves that never receive shadows     |  guide
+| | [Ancient   ]               ! [/] |  | Leaves that never receive shadows     |  guide
 | | [Fern      ]       loading   [x] |  | are converted. Pick a material ...    |
 | | [Bush      ]           off   [ ] |  | +-- g2Mat 1 -----------------------+  |  card titled with the material
 | +----------------------------------+  | | Standard, queue 3000. Standard   |  |  live line: shader, queue,
@@ -84,14 +84,19 @@ line and guide, its cards, Show Advanced where it has an Advanced card, Reset to
   toggle. The select button's label is one line at the button's own size; a label too
   long for it loses its middle ("CustomUni…Asset#2", `RackRow.FitLabel` with
   `UiKit.MiddleCut`), never its end, where VaM puts the "#2" that tells duplicate atoms
-  apart. It is cut at the width the text renders at, in `FitTexts`, and again only when
-  the label or that width changes; the editor's titles show the whole name.
+  apart. It is cut the moment its button is given a width, inside Unity's layout pass
+  (`RowLabelFit`, on the label), so the first frame a row is drawn already shows it cut;
+  `FitTexts` cuts it again when the slow tick finds the width moved. The editor's titles
+  show the whole name.
   A tree's row, on the Trees rack and on the Overview, is named by its atom's uid alone.
   On the Effects rack the toggle is the effect's master. On the Trees rack it is
   the tree's switch: a per-tree proxy storable (`Fix <uid>`, never registered) that writes
   `TreeLooks.SetEnabled` and touches the tree. A tree whose atom has its own FoliageFX
-  shows the amber badge in its state box, with "This atom has its own FoliageFX, which
-  takes precedence." in its tooltip, and no switch.
+  shows no state text: its switch stays in place, greyed and inert
+  (`RackRow.SetSwitchEnabled`), with the amber badge beside it and "This atom has its own
+  FoliageFX plugin instance, which takes precedence." in the badge's tooltip. Every row keeps the same
+  layout: the name, the state box and the switch's room are the same width in each, and
+  a row with no switch (a material) keeps the switch's room empty.
 - **The live rack**: `TreesPanel` keeps a pool of `FeatureView`s keyed by uid. A new
   CustomUnityAsset gets one through `shell.AddFeature` (id `tree:<uid>`), its row built
   with `kit.RackRow` into the rack card, titled Atoms so it does not repeat the page
@@ -104,7 +109,7 @@ line and guide, its cards, Show Advanced where it has an Advanced card, Reset to
   asset and it appears here."
 - **The materials list**: under the rack, a Materials card with one row per material of
   the selected tree, in the asset's order, each with its state (`LeafMaterial.StateLabel`)
-  and no switch; the picked one is painted as selected, and a click opens it in the
+  and the switch's room left empty; the picked one is painted as selected, and a click opens it in the
   editor. The rows are a pool in `TreesPanel`, built with `kit.RackRow` into that card
   when a tree has more materials than any before it and reused for the next tree; the
   rows past the tree's count are hidden.
@@ -266,11 +271,11 @@ Never per-frame string building. The words:
 
 | Where | States |
 |---|---|
-| a tree's row and Status (`Tree.State`) | "3 of 5 converted", "nothing to fix", "loading", "own FoliageFX", "off" (the tree's own switch), "not converted" (its leaves wait for a fix that is not running: Shadow Fix or the master off, the leaf shader still loading) |
+| a tree's row and Status (`Tree.State`) | "3 of 5 converted", "nothing to fix", "loading", "own FoliageFX" (the editor's Status only; the row shows the badge), "off" (the tree's own switch), "not converted" (its leaves wait for a fix that is not running: Shadow Fix or the master off, the leaf shader still loading) |
 | a material in the list (`LeafMaterial.StateLabel`) | "converted", "converted, forced", "original", "original, tinted", "kept original", "other FoliageFX" |
 | the material's reason (`LeafRules`) | a sentence, such as "Standard shader in Fade mode: never receives shadows.", "Opaque or cutout: already receives shadows." or "Overlay: not foliage."; the live line gives the queue before it, so a reason never repeats it |
 | the mode line (`TreesPanel.ModeLine`) | "Converted: shadows, Wind, Falling Leaves and the whole look below apply to it.", "Auto leaves it as the asset made it, so only Tint applies. Convert it for wind, falling leaves and the rest of the look.", "Kept as the asset made it, so only Tint applies. Convert it for wind, falling leaves and the rest of the look.", "Converted once FoliageFX is enabled on the Overview.", "Converted once this tree is enabled.", "Converted once Shadow Fix is switched on, on the Effects page." |
-| the falling leaves line (`FallingLeaves.MaterialLine`) | "Falling leaves: 15 leaf shapes from the texture.", "Falling leaves: 16 rounded pieces of the texture, which has no separate leaves.", "Falling leaves: no usable leaf shapes in this texture.", "Falling leaves: finding leaf shapes...", "Falling leaves: off on the Effects page.", "Falling leaves: off for this material.", "Falling leaves: only from converted materials." |
+| the falling leaves line (`FallingLeaves.MaterialLine`) | "Falling leaves: 15 leaf shapes from the texture.", "Falling leaves: finding leaf shapes...", "Falling leaves: off on the Effects page.", "Falling leaves: off for this material.", "Falling leaves: only from converted materials.", "Falling leaves: none; " and why (`LeafSprites.Refusal`, said whatever the switches, and Drop Falling Leaves is greyed): "this material has no leaf texture.", "the texture is mostly solid, with no leaves cut out of it.", "the texture has no single leaf to cut out: its leaves are joined in clusters, or are blades, needles or twigs.", "the leaves in the texture are too small to cut out.", "the texture has no solid leaf in it.", "the texture is too small to cut leaves from.", "the texture could not be read." |
 | Shadow Fix (`ShadowFix.State`) | "7 materials on 4 trees", "off", "no shader"; "hard edges (MSAA off)" appended when soft edges cannot apply |
 | Wind (`Wind.State`) | "off", "0.3 from 90°" |
 | Falling Leaves (`FallingLeaves.State`) | "12 falling, 40 resting", "off", "finding leaf shapes" |
@@ -313,24 +318,10 @@ button), laid out as rows (`OverviewPanel.ChangelogRows`): a release's number in
 beside its title, a section's name in colour over a hairline, and bullets with the dot in
 its own column and a bold lead.
 
-Every entry is written the same way, as plain text, since `Changelog.Text` is also the
-var's description: one sentence on what the release is, then the sections that apply, in
-this order, then the sign-off.
-
-| Section | Holds |
-|---|---|
-| Heads Up | what updating changes in what the user already has (drawn in the warning amber) |
-| New Features | what can be done now that could not before; a rework goes here, as what the user can now do |
-| Performance | what costs less than it did (drawn in green). A figure goes in only when it was measured for the build that ships and says what it measured, never a frame rate promise |
-| Adjustments | what behaves or looks differently |
-| Bugfixes | what was broken |
-| Known Issues | what ships broken and is known |
-
-A section is its name on a line, then "- " bullets; a bullet opens with a short lead and a
-full stop naming the thing, then one or two sentences. About five bullets to a section,
-related items merged; thanks go on the bullet that earned them. The modal reads that shape
-back: a line with a bullet right under it is a section, and a bullet's first sentence is its
-lead when it ends within `Changelog.LeadMax` characters.
+Every entry is a plain list of features, one short line each, as plain text, since
+`Changelog.Text` is also the var's description: "- " and what the user can do or gets,
+no history and no internals, the same list as CHANGELOG.md. The modal reads the lines back
+as bullets.
 
 ## Slider ranges
 
@@ -393,7 +384,7 @@ The story boxes:
 
 - Shadow Fix: "Fog and depth of field see converted leaves too." "Nothing in the asset is
   changed: switch the fix off and the original materials are back."
-- Falling Leaves: "A texture without separate leaves drops rounded pieces of it instead."
+- Falling Leaves: "A texture whose leaves cannot be cut out drops none; the Trees page says why."
   "Each tree's materials choose with Drop Falling Leaves on the Trees page."
 
 The tree editor and Wind have none: the guide and the hints say it all.

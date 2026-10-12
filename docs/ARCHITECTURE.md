@@ -44,7 +44,7 @@ Effects, in order. Effects never reference each other; what one needs of another
 | `LeafLook` | one material's settings (mode, tint, hue, saturation, brightness, cutoff, smoothness, translucency, double-sided, falling) and their JSON |
 | `TreeLooks` | every tree's looks by tree key and material name, and each tree's switch: the scene's `trees` node |
 | `LeafMaterial` | one source material on a tree: its verdict, its look, its kind (original, leaf, tint), the renderer slots it holds, and what the effects own on it (`Copy`, `FallingMaterial`, `Emitter`); `Assign` writes a material into every slot, `Restore` puts the source back where the copy still is |
-| `Tree` | one CustomUnityAsset atom: its loader (hooked, so a loaded or cleared asset marks it dirty), its materials gathered from the loader's MeshRenderers and SkinnedMeshRenderers, its ground, kept as an offset from the loader so that falling leaves made after the tree is moved land at the moved height; the loaded asset's own name for the tree editor (`AssetName`), read again when the loader loads or clears an asset |
+| `Tree` | one CustomUnityAsset atom: its loader (hooked, so a loaded or cleared asset marks it dirty), its materials gathered from the loader's MeshRenderers and SkinnedMeshRenderers, its ground, the atom's own height (where the tree's pivot stands, not the asset's lowest point, which roots take below the floor); the loaded asset's own name for the tree editor (`AssetName`), read again when the loader loads or clears an asset |
 | `TreeRegistry` | finds the trees, decides precedence and scope, runs the scan, follows renames |
 | `LeafShader` | `FoliageFX.assetbundle` and its one shader, `Vampix Collections/FoliageFX/Leaves` |
 

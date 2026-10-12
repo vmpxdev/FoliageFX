@@ -85,10 +85,10 @@ and then compiles against the local VaM assemblies. The pre-commit hook runs bot
 - `FoliageFXConfig.Version` is `"dev"` in the repo; the packager stamps it. Never edit it.
 - The What's New text is `Types/Core/Changelog.cs`, one `Entry(version, ...)` per release;
   a release build refuses without the entry for its number (`Entry(1, ...)` for the first).
-  Every entry has the same shape, in plain text: one sentence, then Heads Up, New
-  Features, Performance, Adjustments, Bugfixes and Known Issues (in that order, empty ones
-  left out) as "- " bullets that open with a short lead and a full stop, then the
-  sign-off. The file's header and `docs/UI_DESIGN.md` say what goes where.
+  Every entry is a plain list of features, one short line each, in plain text, the same
+  list as `CHANGELOG.md`. No history, no internals, no sign-off.
+- `CHANGELOG.md` is a plain list of features per release, one short line each. No
+  history, no internals: those belong in commit messages and `docs/`.
 
 ## Copy rules
 

@@ -26,7 +26,7 @@ using UnityEngine.UI;
 sealed class TreesPanel
 {
     const string Guide = "Leaves that never receive shadows are converted. Pick a material on the left to check or change it.";
-    const string OwnInstance = "This atom has its own FoliageFX, which takes precedence.";
+    const string OwnInstance = "This atom has its own FoliageFX plugin instance, which takes precedence.";
     const string Empty = "No CustomUnityAsset atoms in the scene. Add a tree or plant asset and it appears here.";
     const string TintOnly = "only Tint applies. Convert it for wind, falling leaves and the rest of the look.";
 
@@ -86,6 +86,7 @@ sealed class TreesPanel
     UiSection header;
     UiSection materialCard;
     UIDynamicToggle enabledToggle;
+    UIDynamicToggle dropToggle;
     ChoiceStrip modeStrip;
     Text caption;
     // Disjoint bags, so each part shows on its own terms: the header and its
@@ -234,7 +235,7 @@ sealed class TreesPanel
         kit.Toggle(doubleSided, true, leafBag);
         kit.Slider(translucency, true, leafBag);
         Hint("How much light shows through the leaves from behind.", leafBag);
-        kit.Toggle(dropLeaves, true, leafBag);
+        dropToggle = kit.Toggle(dropLeaves, true, leafBag);
         Hint("This material's leaves fall when Falling Leaves is on.", leafBag);
         kit.LiveLine(FallingLine, true, leafBag, 1);
         kit.EndSection();
@@ -356,7 +357,7 @@ sealed class TreesPanel
         r.View = shell.AddFeature(FoliageFXConfig.PageTrees, FoliageFXConfig.TreeRowPrefix + uid, uid, r.Proxy);
         // The shell refreshes a row from its state; without this it would
         // print the switch's "on" or "off" over the tree's state.
-        r.View.OnState = delegate { return r.Tree != null ? r.Tree.State() : ""; };
+        r.View.OnState = delegate { return RowState(r.Tree); };
         SplitPane split = kit.Split;
         UiSection section = kit.Section;
         kit.Split = cat.Split;
@@ -371,6 +372,14 @@ sealed class TreesPanel
         return r;
     }
 
+    // A tree another FoliageFX looks after has no state of its own in a row:
+    // its badge's tooltip says why, beside its greyed switch, so the row keeps
+    // the layout of every other.
+    static string RowState(Tree t)
+    {
+        return t != null && !t.Yielded ? t.State() : "";
+    }
+
     // The row's state, badge and switch. RackRow.SetState clears the badge
     // (it is meant for "needs" states), so the badge is set after it, here and
     // after every shell refresh.
@@ -381,15 +390,14 @@ sealed class TreesPanel
         if (r.Proxy.val != on) r.Proxy.valNoCallback = on;
         RackRow row = r.View.Row;
         if (row == null) return;
-        string state = t.State();
+        string state = RowState(t);
         if (state != r.LastState)
         {
             r.LastState = state;
             row.SetState(state);
         }
         row.SetBadge(t.Yielded ? OwnInstance : null);
-        GameObject toggle = row.Toggle != null ? row.Toggle.gameObject : null;
-        if (toggle != null && toggle.activeSelf == t.Yielded) toggle.SetActive(!t.Yielded);
+        row.SetSwitchEnabled(!t.Yielded);
     }
 
     void Switch(Row r, bool on)
@@ -451,6 +459,9 @@ sealed class TreesPanel
         }
         if (m != null && materialCard != null && materialCard.TitleText != null && materialCard.TitleText.text != m.Name) materialCard.TitleText.text = m.Name;
         if (editable && m.Look != pushedLook) Push(m.Look);
+        // A texture that gives no leaf shapes drops nothing whatever the
+        // switch says; the falling leaves line under it says why.
+        if (editable && life.Falling != null) UiKit.SetEnabled(dropToggle, life.Falling.CanDrop(m));
         if (modeStrip != null) modeStrip.Repaint();
         // Another material's lines now, not a slow tick later.
         if (m != linesFor)

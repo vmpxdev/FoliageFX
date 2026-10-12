@@ -30,7 +30,6 @@ sealed class Tree
 
     readonly TreeRegistry registry;
     TreeLooks looks;
-    float groundOffset;   // the asset's lowest point, below the loader
     string assetName;
     bool nameRead;
     CustomUnityAssetLoader.AssetLoadedCallback onLoaded;
@@ -46,11 +45,15 @@ sealed class Tree
         Loader = loader;
     }
 
-    // The lowest point of the asset, kept as an offset from the loader so a
-    // tree moved after its gather still drops its leaves to its own foot.
+    // Where the tree stands: its atom's height, which is where a tree's
+    // pivot sits on the floor. Not the asset's lowest point: roots and
+    // trunks reach below the pivot (1.35 m on one of MR's Sakura trees,
+    // 3.27 m on YoshiD's ancient tree), and leaves landing there lie under
+    // the floor out of sight. Read when the leaves are made; they move with
+    // the tree after.
     public float GroundY
     {
-        get { return Loader != null ? Loader.transform.position.y + groundOffset : groundOffset; }
+        get { return Loader != null ? Loader.transform.position.y : 0f; }
     }
 
     // The tree's own switch on the Trees page; on until the looks say off.
@@ -150,7 +153,7 @@ sealed class Tree
 
     // Mesh and skinned mesh renderers only: a particle or line renderer in
     // the prefab is no foliage, and the falling leaves' own systems sit under
-    // the same loader. The ground is the lowest point of the asset.
+    // the same loader.
     public void Gather(TreeLooks looks, Shader leafShader, bool otherShaders)
     {
         NeedsGather = false;
@@ -159,16 +162,10 @@ sealed class Tree
         if (Loader == null) return;
         found.Clear();
         Loader.GetComponentsInChildren<Renderer>(true, found);
-        bool anyBounds = false;
-        float baseY = Loader.transform.position.y;
-        float lowest = baseY;
         for (int i = 0; i < found.Count; i++)
         {
             Renderer r = found[i];
             if (r == null || (!(r is MeshRenderer) && !(r is SkinnedMeshRenderer))) continue;
-            float bottom = r.bounds.min.y;
-            if (!anyBounds || bottom < lowest) lowest = bottom;
-            anyBounds = true;
             Material[] mats = r.sharedMaterials;
             for (int s = 0; s < mats.Length; s++)
             {
@@ -186,7 +183,6 @@ sealed class Tree
             }
         }
         found.Clear();
-        groundOffset = lowest - baseY;
         for (int i = 0; i < Materials.Count; i++)
         {
             LeafMaterial m = Materials[i];

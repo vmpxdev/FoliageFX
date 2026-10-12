@@ -67,7 +67,7 @@ sealed class EffectsPanel
         kit.Slider(fall.RestSeconds, true, falling.InspectorBag, "How long a leaf lies where it lands before it fades.");
         kit.Toggle(fall.CastShadows, true, falling.InspectorBag);
         List<string> fallStory = new List<string>();
-        fallStory.Add("A texture without separate leaves drops rounded pieces of it instead.");
+        fallStory.Add("A texture whose leaves cannot be cut out drops none; the Trees page says why.");
         fallStory.Add("Each tree's materials choose with Drop Falling Leaves on the Trees page.");
         kit.HintBox(fallStory, true, falling.InspectorBag);
         falling.OnState = fall.State;

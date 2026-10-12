@@ -54,8 +54,8 @@ a material Auto missed, Keep Original leaves it as the asset made it. Only Tint 
 material that is not converted; wind, falling leaves and the rest of the look need it
 converted, and the line under Mode says so. Every change applies to that tree at once.
 
-A tree whose atom has its own FoliageFX shows "own FoliageFX" and an amber badge in its row,
-and no switch: that instance takes precedence.
+A tree whose atom has its own FoliageFX shows its switch greyed, with an amber badge beside
+it whose tooltip says that instance takes precedence.
 
 Every effect setting is a plain JSONStorable, so Timeline, triggers, and other plugins can
 drive it whether or not it is visible; panel state, Show Hints and the tree
@@ -76,7 +76,7 @@ There are no presets, by decision: a look belongs to a tree in a scene.
 ## Docs
 
 - `AGENTS.md`: how to work in this repo
-- `CHANGELOG.md`: the developer log (not shipped; the user-facing notes are `Types/Core/Changelog.cs`)
+- `CHANGELOG.md`: a plain list of features per release (not shipped; the user-facing notes are `Types/Core/Changelog.cs`)
 - `docs/ARCHITECTURE.md`: layers, ownership, frame order, effect contract, persistence
 - `docs/UI_DESIGN.md`: panel model, categories, copy rules, persistence scopes, palette, the add-an-effect checklist
 - `docs/PLAN.md`: what ships, what is out of scope, what comes next
@@ -124,9 +124,14 @@ Packaging (`tools/pack.ps1`): stages the cslist and the stripped sources under
 it does not match `shader/`), and on a dev build `build.json` (a release carries only its
 number), writes `meta.json` from `packaging/meta.template.json` (license PC; the What's New
 entry appended to the description), zips `VampixCollections.FoliageFX.<N>.var`
-(`VampixCollections` is the filename creator of every Vampix package), then checks it
-(every cslist entry present and no source outside it, nothing from the deny list, no
-`Saves/` entry, Version stamped, comments stripped, meta.json valid). `-Install` copies it
+(`VampixCollections` is the filename creator of every Vampix package), then checks it.
+Every var is checked the same way, dev or release, whether it comes from `-Install`, the
+pre-push hook or CI: the staged sources must be code only (`Strip --check`: no comment, no
+`#region`, `#pragma`, `#warning` or `#error` line, no code an `#if` leaves out); the var may
+hold only meta.json, the cslist and its sources, the bundle and, on a dev build,
+`build.json`; no text in it may carry a path on a drive or into a home folder, the account
+building it, an e-mail address, a TODO, FIXME, XXX or HACK marker, or an AI assistant's
+name; and the Version must be stamped and meta.json valid. `-Install` copies it
 into AddonPackages. `-Tag v1` is a release build and refuses without `Entry(1, ...)` in
 `Types/Core/Changelog.cs`. A dev build is its own package,
 `VampixCollections.FoliageFX-dev.<commits>.var`, numbered by the commit count, with Version

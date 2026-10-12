@@ -138,23 +138,33 @@ shadows, so shade under a canopy is visible.
    drop, the flutter on top. Time On Ground: leaves lie where they land that long, then
    fade.
 3. Wind on: the falling leaves drift with the wind; turn Direction and the drift follows.
-4. Resting: leaves land at the tree's ground (the bottom of the asset) and lie flat; they
-   do not land on other atoms (PLAN: not in version 1).
+4. Resting: leaves land at the height of the tree's atom, on the floor under the Sakura and
+   the ancient tree too (their roots reach below it), and lie flat; they do not land on
+   other atoms (PLAN: not in version 1).
 5. Cast Shadows off: falling leaves cast no shadow; on: they do.
 6. Drop Falling Leaves off for one material: its leaves stop and its line reads "Falling
    leaves: off for this material."; the tree's other dropping materials carry on. A
    material that is not converted reads "Falling leaves: only from converted materials."
-7. A texture without separate leaves drops rounded pieces of it and reads "Falling leaves:
-   N rounded pieces of the texture, which has no separate leaves."; a texture with nothing
-   usable reads "Falling leaves: no usable leaf shapes in this texture." and drops none.
+7. A falling leaf is always a leaf, petal or bud the texture draws; nothing else is cut,
+   and no texture gives rounded pieces. Damarmau.Realistic_trees, a leaf material set to
+   Convert: "Falling leaves: 2 leaf shapes from the texture." (its texture is two whole
+   leaves). MR.Animated_Tree's leaves: 1 leaf shape (one leaf cropped to its texture's
+   edges). MR.Sakura_Trees: blossoms and buds, no sprigs. A texture that gives nothing
+   reads "Falling leaves: none; " and the reason, its Drop Falling Leaves is greyed, and
+   VaM's Message Log has one line naming the texture: MR.Grass_Patches and MR.Trees_2's
+   evergreen, "the texture has no single leaf to cut out: its leaves are joined in
+   clusters, or are blades, needles or twigs."; a trunk or Yass.sagano_bamboo_forest's
+   atlas set to Convert, "the texture is mostly solid, with no leaves cut out of it."
 8. Falling Leaves off: no falling or resting leaf remains; the state reads "off", and the
    editor's line "Falling leaves: off on the Effects page."
 
 ## Precedence checklist
 
 1. A session FoliageFX and a second FoliageFX on the Sakura's atom: in the session
-   instance the Sakura's row reads "own FoliageFX", shows the amber badge with "This atom
-   has its own FoliageFX, which takes precedence." on hover, and has no switch. The
+   instance the Sakura's row has no state text, a greyed switch that does not toggle, and
+   the amber badge beside it with "This atom has its own FoliageFX plugin instance, which takes
+   precedence." on hover; its name is as wide as every other row's, on the Trees page and
+   on the Overview. The
    atom's instance converts the tree; once both have scanned no material in its editor
    reads "other FoliageFX", and nothing is converted twice.
 2. Remove the atom's instance: its originals come back, and within a scan the session

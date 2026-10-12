@@ -6,11 +6,17 @@ using Microsoft.CodeAnalysis.CSharp;
 //   Copies the cslist and every source it lists into outDir (same relative
 //   paths) with all comments removed and blank runs collapsed. Each stripped
 //   file is re-parsed and must be free of syntax errors, or the run fails.
+// Strip --check <dir>
+//   Fails when any .cs file under dir still holds a comment, a #region,
+//   #pragma, #warning or #error line, or code an #if leaves out: what a var
+//   carries is the code that runs and nothing else. The packager runs it on
+//   every build, dev or release, after the stripped sources are staged.
 sealed class Program
 {
     static int Main(string[] args)
     {
-        if (args.Length != 2) { Console.Error.WriteLine("usage: Strip <cslist> <outDir>"); return 2; }
+        if (args.Length == 2 && args[0] == "--check") return Check(Path.GetFullPath(args[1]));
+        if (args.Length != 2) { Console.Error.WriteLine("usage: Strip <cslist> <outDir> | Strip --check <dir>"); return 2; }
         string cslist = Path.GetFullPath(args[0]);
         string root = Path.GetDirectoryName(cslist)!;
         string outDir = Path.GetFullPath(args[1]);
@@ -40,6 +46,54 @@ sealed class Program
         File.Copy(cslist, Path.Combine(outDir, Path.GetFileName(cslist)), true);
         Console.WriteLine("strip: " + files.Count + " files, " + inBytes + " -> " + outBytes + " chars");
         return 0;
+    }
+
+    static int Check(string dir)
+    {
+        var parse = new CSharpParseOptions(LanguageVersion.CSharp5);
+        int files = 0, problems = 0;
+        foreach (string path in Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories))
+        {
+            files++;
+            var tree = CSharpSyntaxTree.ParseText(File.ReadAllText(path), parse, path);
+            foreach (var trivia in tree.GetRoot().DescendantTrivia(descendIntoTrivia: true))
+            {
+                string what = Leftover(trivia.Kind());
+                if (what == null) continue;
+                int line = trivia.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                Console.Error.WriteLine(Path.GetRelativePath(dir, path) + "(" + line + "): " + what);
+                problems++;
+            }
+        }
+        if (problems > 0) return 1;
+        Console.WriteLine("check: " + files + " files, code only");
+        return 0;
+    }
+
+    static string Leftover(SyntaxKind kind)
+    {
+        switch (kind)
+        {
+            case SyntaxKind.SingleLineCommentTrivia:
+            case SyntaxKind.MultiLineCommentTrivia:
+                return "a comment";
+            case SyntaxKind.SingleLineDocumentationCommentTrivia:
+            case SyntaxKind.MultiLineDocumentationCommentTrivia:
+                return "a documentation comment";
+            case SyntaxKind.RegionDirectiveTrivia:
+            case SyntaxKind.EndRegionDirectiveTrivia:
+                return "a #region line";
+            case SyntaxKind.PragmaWarningDirectiveTrivia:
+            case SyntaxKind.PragmaChecksumDirectiveTrivia:
+                return "a #pragma line";
+            case SyntaxKind.WarningDirectiveTrivia:
+            case SyntaxKind.ErrorDirectiveTrivia:
+                return "a #warning or #error line";
+            case SyntaxKind.DisabledTextTrivia:
+                return "code an #if leaves out";
+            default:
+                return null;
+        }
     }
 
     // Trailing whitespace off every line, runs of blank lines down to one,

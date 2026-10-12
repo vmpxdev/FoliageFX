@@ -205,6 +205,8 @@ sealed class FallingLeaves
             return;
         }
         job.Done = true;
+        if (job.Sprites.ShapeCount == 0 && Log != null)
+            Log.Warn("No falling leaves from the texture " + (job.Source != null ? job.Source.name : "") + ": " + Refusal(job));
         for (int i = 0; i < waiting.Count; i++) waiting[i].Dirty = true;
         waiting.Clear();
     }
@@ -306,16 +308,39 @@ sealed class FallingLeaves
     public string MaterialLine(LeafMaterial m)
     {
         if (m == null) return "";
+        Texture tex = LeafTexture(m);
+        if (tex == null) return "Falling leaves: none; this material has no leaf texture.";
+        SpriteJob job = FindJob(tex);
+        // Known to give nothing: said whatever the switches, since no switch changes it.
+        if (job != null && job.Done && job.Sprites.ShapeCount == 0) return "Falling leaves: none; " + Refusal(job);
         if (!Enabled.val) return "Falling leaves: off on the Effects page.";
         if (!m.Converted) return "Falling leaves: only from converted materials.";
         if (m.Look == null || !m.Look.Falling) return "Falling leaves: off for this material.";
-        Texture tex = m.Source != null && m.Source.HasProperty(MainTexId) ? m.Source.GetTexture(MainTexId) : null;
-        SpriteJob job = tex != null ? FindJob(tex) : null;
         if (job == null || !job.Done) return "Falling leaves: finding leaf shapes...";
         int n = job.Sprites.ShapeCount;
-        if (n == 0) return "Falling leaves: no usable leaf shapes in this texture.";
-        if (job.Sprites.Fragments) return "Falling leaves: " + n + (n == 1 ? " rounded piece" : " rounded pieces") + " of the texture, which has no separate leaves.";
         return "Falling leaves: " + n + (n == 1 ? " leaf shape" : " leaf shapes") + " from the texture.";
+    }
+
+    // False once it is known that this material's texture gives no leaf
+    // shapes, or when it has no texture: its Drop Falling Leaves then does
+    // nothing, and the Trees page greys it. True while not yet known.
+    public bool CanDrop(LeafMaterial m)
+    {
+        if (m == null) return false;
+        Texture tex = LeafTexture(m);
+        if (tex == null) return false;
+        SpriteJob job = FindJob(tex);
+        return job == null || !job.Done || job.Sprites.ShapeCount > 0;
+    }
+
+    static Texture LeafTexture(LeafMaterial m)
+    {
+        return m.Source != null && m.Source.HasProperty(MainTexId) ? m.Source.GetTexture(MainTexId) : null;
+    }
+
+    static string Refusal(SpriteJob job)
+    {
+        return job.Sprites.Refusal ?? "the texture could not be read.";
     }
 
     public void Describe(StringBuilder sb)
@@ -333,7 +358,8 @@ sealed class FallingLeaves
             SpriteJob j = jobs[i];
             sb.Append(i == 0 ? ": " : ", ").Append(j.Source != null ? j.Source.name : "gone").Append(' ');
             if (!j.Done) sb.Append("finding");
-            else sb.Append(j.Sprites.ShapeCount).Append(j.Sprites.Fragments ? " pieces" : " shapes");
+            else if (j.Sprites.ShapeCount > 0) sb.Append(j.Sprites.ShapeCount).Append(" shapes");
+            else sb.Append("none: ").Append(Refusal(j));
         }
     }
 }

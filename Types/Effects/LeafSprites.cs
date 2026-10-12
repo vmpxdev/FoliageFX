@@ -8,8 +8,11 @@ using UnityEngine;
 // texture's alpha; the most typical of them (by size, then colour) go into a
 // 4 x 4 atlas, each centred in its tile with its aspect kept and a
 // transparent margin, so a particle showing one tile shows one leaf. A
-// texture that is one dense cluster has no such regions, and gives rounded
-// cut-outs of its well-covered parts instead.
+// texture made of a few big leaves (Damarmau's trees draw two to a texture),
+// or of one leaf cropped to its edges, gives those leaves whole. Anything
+// else gives no shapes at all, and Refusal says why: a solid texture, one
+// whose leaves are joined into a cluster, one whose leaves are specks. A
+// falling leaf is always a leaf the texture draws, or there is none.
 //
 // UnityEngine and FoliageFXConfig only, no VaM type, so it runs outside VaM
 // as well (a standalone player tried it). Nothing here catches; a throw
@@ -23,21 +26,14 @@ sealed class LeafSprites
     const byte OpaqueAlpha = 128;
     // A texture this small or smaller on a side holds no leaf worth cutting.
     const int MinTextureSize = 8;
-    // A rounded cut-out is an oval this many times as tall as wide at the
-    // least (the rest is random up to round), and never under this many
-    // texels tall.
-    const float FragmentAspectMin = 0.55f;
-    const int FragmentRadiusYMin = 4;
-    // The oval's edge fades over this share of its radius: 1/6.
-    const float FragmentEdgeSharpness = 6f;
-    // A fixed seed, so a texture gives the same cut-outs every time.
-    const int FragmentSeed = 1234;
 
     public Texture Source;
     public Texture2D Atlas;
     public Mesh Quad;
     public int ShapeCount;
-    public bool Fragments;
+    // Why the texture gave no shapes, as the end of a sentence ("the
+    // texture is solid, ..."); null while it has shapes or is not read yet.
+    public string Refusal;
 
     sealed class Blob
     {
@@ -46,6 +42,7 @@ sealed class LeafSprites
         public int MinX, MinY, MaxX, MaxY;
         public bool TouchesEdge;
         public long R, G, B;
+        public double SumX, SumY, SumXX, SumYY, SumXY;   // second moments, for the elongation
     }
 
     // Yields between the heavy steps (the read, each thinning level), so a
@@ -55,9 +52,10 @@ sealed class LeafSprites
     {
         into.Source = source;
         into.ShapeCount = 0;
-        into.Fragments = false;
+        into.Refusal = null;
         if (source == null || source.width < MinTextureSize || source.height < MinTextureSize)
         {
+            into.Refusal = "the texture is too small to cut leaves from.";
             done();
             yield break;
         }
@@ -73,7 +71,21 @@ sealed class LeafSprites
         yield return null;
 
         byte[] mask = new byte[w * h];
-        for (int i = 0; i < mask.Length; i++) mask[i] = px[i].a >= OpaqueAlpha ? (byte)1 : (byte)0;
+        int solid = 0;
+        for (int i = 0; i < mask.Length; i++)
+        {
+            mask[i] = px[i].a >= OpaqueAlpha ? (byte)1 : (byte)0;
+            solid += mask[i];
+        }
+        // Leaves are cut out of their background: a texture that is mostly
+        // solid is a surface (bark, a wall, an environment's atlas), and any
+        // shape found in it would be a piece of that surface.
+        if (mask.Length - solid < mask.Length * FoliageFXConfig.LeafClearMin)
+        {
+            into.Refusal = "the texture is mostly solid, with no leaves cut out of it.";
+            done();
+            yield break;
+        }
 
         // Leaves and blossoms are often joined to their twigs. Thinning the
         // mask by a texel or two cuts those thin links; the level that
@@ -81,13 +93,15 @@ sealed class LeafSprites
         // back to full size.
         List<Blob> best = null;
         int[] bestLabels = null;
+        int largest = 0;
         for (int erode = 0; erode <= FoliageFXConfig.LeafErodeMax; erode++)
         {
             int[] labels = new int[w * h];
             List<Blob> blobs = Label(erode == 0 ? mask : Erode(mask, w, h, erode), labels, w, h);
             if (erode > 0) Grow(mask, labels, w, h, erode);
             Measure(blobs, labels, px, w, h);
-            List<Blob> picked = PickLeaves(blobs, w, h);
+            for (int i = 0; erode == 0 && i < blobs.Count; i++) if (blobs[i].Area > largest) largest = blobs[i].Area;
+            List<Blob> picked = PickLeaves(blobs, labels, w, h);
             if (best == null || picked.Count > best.Count)
             {
                 best = picked;
@@ -96,28 +110,25 @@ sealed class LeafSprites
             yield return null;
         }
 
-        int size = FoliageFXConfig.AtlasSize;
-        Color32[] atlasPx = new Color32[size * size];
-        int shapeCount;
-        bool fragments = best.Count < FoliageFXConfig.LeafFragmentMin;
-        if (!fragments)
+        // Too few shapes to be the texture's leaves rather than strays,
+        // unless one is a whole big leaf: two of those are its own leaves.
+        if (best.Count < FoliageFXConfig.LeafShapesMin && !HasWholeLeaf(best, w * h))
         {
-            for (int i = 0; i < best.Count; i++)
-            {
-                Blob b = best[i];
-                // One texel of margin around the shape, so its soft edge is
-                // copied too.
-                CopyTile(px, bestLabels, w, h, b.MinX - 1, b.MinY - 1,
-                    b.MaxX - b.MinX + 3, b.MaxY - b.MinY + 3, b.Id, false, Fill(b), atlasPx, i);
-            }
-            shapeCount = best.Count;
-        }
-        else shapeCount = MakeFragments(px, w, h, atlasPx);
-        if (shapeCount == 0)
-        {
+            into.Refusal = Refuse(solid, largest, w * h);
             done();
             yield break;
         }
+        int size = FoliageFXConfig.AtlasSize;
+        Color32[] atlasPx = new Color32[size * size];
+        for (int i = 0; i < best.Count; i++)
+        {
+            Blob b = best[i];
+            // One texel of margin around the shape, so its soft edge is
+            // copied too.
+            CopyTile(px, bestLabels, w, h, b.MinX - 1, b.MinY - 1,
+                b.MaxX - b.MinX + 3, b.MaxY - b.MinY + 3, b.Id, Fill(b), atlasPx, i);
+        }
+        int shapeCount = best.Count;
 
         Texture2D atlas = new Texture2D(size, size, TextureFormat.RGBA32, true, false);
         atlas.name = "FoliageFX leaves " + source.name;
@@ -130,7 +141,6 @@ sealed class LeafSprites
         into.Atlas = atlas;
         into.Quad = MakeQuad();
         into.ShapeCount = shapeCount;
-        into.Fragments = fragments;
         done();
     }
 
@@ -260,6 +270,11 @@ sealed class LeafSprites
             Blob b = blobs[labels[p] - 1];
             int x = p % w, y = p / w;
             b.Area++;
+            b.SumX += x;
+            b.SumY += y;
+            b.SumXX += (double)x * x;
+            b.SumYY += (double)y * y;
+            b.SumXY += (double)x * y;
             b.R += px[p].r;
             b.G += px[p].g;
             b.B += px[p].b;
@@ -286,26 +301,38 @@ sealed class LeafSprites
         return new Color32((byte)(b.R / a), (byte)(b.G / a), (byte)(b.B / a), 0);
     }
 
-    // Leaf-like regions: not cut by the texture's border, neither a speck nor
-    // a whole cluster, not a long twig, reasonably solid, and not much darker
-    // than the typical shape (that drops buds, berries and bark). Of those,
-    // the most typically sized are kept rather than the biggest, which tend
-    // to be whole sprigs.
-    static List<Blob> PickLeaves(List<Blob> blobs, int w, int h)
+    // Single leaves, petals and buds, and nothing else: a region not cut by
+    // the texture's border, neither a speck nor a whole cluster, that does
+    // not fill its box (a block of wall or fence does), is not a blade or a
+    // needle (too thin across its long axis), bulges like a leaf (a sprig,
+    // a clump of needles or blades has deep gaps), has no holes through it
+    // (needle clumps do), and is not much darker than the typical shape
+    // (that drops berries and bark). Of those, the most typically sized are
+    // kept. A region bigger than a leaf among many is one whole leaf only
+    // when it bulges more still, and may touch the texture's border, as a
+    // leaf cropped to its edges does. The limits were set on the leaf
+    // textures of eight tree, grass and environment packs.
+    static List<Blob> PickLeaves(List<Blob> blobs, int[] labels, int w, int h)
     {
         float total = w * h;
         float minArea = Mathf.Max(FoliageFXConfig.LeafAreaMinTexels, total * FoliageFXConfig.LeafAreaMinShare);
         float maxArea = total * FoliageFXConfig.LeafAreaMaxShare;
+        float wholeMax = total * FoliageFXConfig.LeafWholeMaxShare;
         List<Blob> picked = new List<Blob>();
         for (int i = 0; i < blobs.Count; i++)
         {
             Blob b = blobs[i];
-            if (b.TouchesEdge) continue;
-            if (b.Area < minArea || b.Area > maxArea) continue;
+            bool big = b.Area > maxArea;
+            if (b.TouchesEdge && !big) continue;
+            if (b.Area < minArea || b.Area > wholeMax) continue;
             int bw = b.MaxX - b.MinX + 1, bh = b.MaxY - b.MinY + 1;
             float aspect = bw / (float)bh;
             if (aspect < FoliageFXConfig.LeafAspectMin || aspect > FoliageFXConfig.LeafAspectMax) continue;
-            if (b.Area / (float)(bw * bh) < FoliageFXConfig.LeafSolidityMin) continue;
+            float fill = b.Area / (float)(bw * bh);
+            if (fill < FoliageFXConfig.LeafSolidityMin || fill > FoliageFXConfig.LeafFillMax) continue;
+            if (Elongation(b) < FoliageFXConfig.LeafElongationMin) continue;
+            if (Convexity(b, labels, w) < (big ? FoliageFXConfig.LeafWholeConvexMin : FoliageFXConfig.LeafConvexMin)) continue;
+            if (HoleShare(b, labels, w) > FoliageFXConfig.LeafHoleShareMax) continue;
             picked.Add(b);
         }
         if (picked.Count == 0) return picked;
@@ -322,6 +349,131 @@ sealed class LeafSprites
         int max = FoliageFXConfig.AtlasMaxShapes;
         if (picked.Count > max) picked.RemoveRange(max, picked.Count - max);
         return picked;
+    }
+
+    // The shape's width over its length along its own axes, from its second
+    // moments, so a blade lying diagonally reads as thin as one standing up:
+    // near 1 for a round petal, well under 0.15 for a blade of grass.
+    static float Elongation(Blob b)
+    {
+        double n = b.Area;
+        double mx = b.SumX / n, my = b.SumY / n;
+        double cxx = b.SumXX / n - mx * mx, cyy = b.SumYY / n - my * my, cxy = b.SumXY / n - mx * my;
+        double half = (cxx + cyy) * 0.5;
+        double spread = System.Math.Sqrt(System.Math.Max(0.0, half * half - (cxx * cyy - cxy * cxy)));
+        double major = half + spread, minor = half - spread;
+        return major > 0.0 ? (float)System.Math.Sqrt(System.Math.Max(0.0, minor) / major) : 0f;
+    }
+
+    // The see-through texels the shape encloses, over its area: the texels
+    // of its box that are not the shape and cannot be reached from the box's
+    // edge without crossing it. A leaf has none, a clump of needles many.
+    static float HoleShare(Blob b, int[] labels, int w)
+    {
+        int bw = b.MaxX - b.MinX + 1, bh = b.MaxY - b.MinY + 1;
+        bool[] reached = new bool[bw * bh];
+        int[] stack = new int[bw * bh];
+        int top = 0;
+        for (int y = 0; y < bh; y++)
+            for (int x = 0; x < bw; x++)
+            {
+                if (x != 0 && y != 0 && x != bw - 1 && y != bh - 1) continue;
+                int q = y * bw + x;
+                if (reached[q] || labels[(b.MinY + y) * w + b.MinX + x] == b.Id) continue;
+                reached[q] = true;
+                stack[top++] = q;
+            }
+        while (top > 0)
+        {
+            int q = stack[--top];
+            int x = q % bw, y = q / bw;
+            if (x > 0) top = Reach(labels, w, b, bw, reached, stack, top, q - 1);
+            if (x < bw - 1) top = Reach(labels, w, b, bw, reached, stack, top, q + 1);
+            if (y > 0) top = Reach(labels, w, b, bw, reached, stack, top, q - bw);
+            if (y < bh - 1) top = Reach(labels, w, b, bw, reached, stack, top, q + bw);
+        }
+        int holes = 0;
+        for (int q = 0; q < reached.Length; q++)
+            if (!reached[q] && labels[(b.MinY + q / bw) * w + b.MinX + q % bw] != b.Id) holes++;
+        return holes / (float)Mathf.Max(1, b.Area);
+    }
+
+    static int Reach(int[] labels, int w, Blob b, int bw, bool[] reached, int[] stack, int top, int q)
+    {
+        if (reached[q] || labels[(b.MinY + q / bw) * w + b.MinX + q % bw] == b.Id) return top;
+        reached[q] = true;
+        stack[top] = q;
+        return top + 1;
+    }
+
+    // Why nothing was cut, from what the texture's alpha holds.
+    static string Refuse(int solid, int largest, int total)
+    {
+        float minArea = Mathf.Max(FoliageFXConfig.LeafAreaMinTexels, total * FoliageFXConfig.LeafAreaMinShare);
+        if (largest < minArea) return solid == 0 ? "the texture has no solid leaf in it." : "the leaves in the texture are too small to cut out.";
+        return "the texture has no single leaf to cut out: its leaves are joined in clusters, or are blades, needles or twigs.";
+    }
+
+    static bool HasWholeLeaf(List<Blob> picked, int total)
+    {
+        float maxArea = total * FoliageFXConfig.LeafAreaMaxShare;
+        for (int i = 0; i < picked.Count; i++)
+            if (picked[i].Area > maxArea) return true;
+        return false;
+    }
+
+    // The shape's area over its convex hull's, the hull taken round each
+    // row's two ends: near 1 for a leaf, well under it for a sprig.
+    static float Convexity(Blob b, int[] labels, int w)
+    {
+        List<Vector2> ends = new List<Vector2>();
+        for (int y = b.MinY; y <= b.MaxY; y++)
+        {
+            int row = y * w, first = -1, last = -1;
+            for (int x = b.MinX; x <= b.MaxX; x++)
+            {
+                if (labels[row + x] != b.Id) continue;
+                if (first < 0) first = x;
+                last = x;
+            }
+            if (first < 0) continue;
+            // The corners of the row's end texels, so a convex shape's hull
+            // covers what its texels cover.
+            ends.Add(new Vector2(first, y));
+            ends.Add(new Vector2(last + 1, y));
+            ends.Add(new Vector2(first, y + 1));
+            ends.Add(new Vector2(last + 1, y + 1));
+        }
+        float hull = HullArea(ends);
+        return hull > 0f ? b.Area / hull : 0f;
+    }
+
+    // Andrew's monotone chain, then the shoelace formula.
+    static float HullArea(List<Vector2> points)
+    {
+        if (points.Count < 3) return 0f;
+        points.Sort(delegate (Vector2 a, Vector2 c) { return a.x != c.x ? a.x.CompareTo(c.x) : a.y.CompareTo(c.y); });
+        Vector2[] hull = new Vector2[points.Count * 2];
+        int k = 0;
+        for (int i = 0; i < points.Count; i++)
+        {
+            while (k >= 2 && Cross(hull[k - 2], hull[k - 1], points[i]) <= 0f) k--;
+            hull[k++] = points[i];
+        }
+        int lower = k + 1;
+        for (int i = points.Count - 2; i >= 0; i--)
+        {
+            while (k >= lower && Cross(hull[k - 2], hull[k - 1], points[i]) <= 0f) k--;
+            hull[k++] = points[i];
+        }
+        float area = 0f;
+        for (int i = 0; i < k - 1; i++) area += hull[i].x * hull[i + 1].y - hull[i + 1].x * hull[i].y;
+        return Mathf.Abs(area) * 0.5f;
+    }
+
+    static float Cross(Vector2 o, Vector2 a, Vector2 b)
+    {
+        return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
     }
 
     static float SizeDistance(Blob b, float typical)
@@ -345,68 +497,11 @@ sealed class LeafSprites
         return Luminance(sorted[sorted.Count - 1]);
     }
 
-    // Rounded cut-outs from well-covered, typically coloured parts of a
-    // dense cluster. Returns how many tiles were filled.
-    static int MakeFragments(Color32[] px, int w, int h, Color32[] atlasPx)
-    {
-        int[] histogram = new int[256];
-        int opaqueTotal = 0;
-        for (int i = 0; i < px.Length; i++)
-        {
-            if (px[i].a < OpaqueAlpha) continue;
-            histogram[(int)(0.2126f * px[i].r + 0.7152f * px[i].g + 0.0722f * px[i].b)]++;
-            opaqueTotal++;
-        }
-        if (opaqueTotal == 0) return 0;
-        int medianLum = 0;
-        for (int run = 0; medianLum < 255; medianLum++)
-        {
-            run += histogram[medianLum];
-            if (run * 2 >= opaqueTotal) break;
-        }
-
-        System.Random rng = new System.Random(FragmentSeed);
-        int radius = Mathf.Max(FoliageFXConfig.FragmentRadiusMin, Mathf.RoundToInt(Mathf.Min(w, h) * FoliageFXConfig.FragmentRadiusShare));
-        int count = 0;
-        for (int attempt = 0; attempt < FoliageFXConfig.FragmentAttempts && count < FoliageFXConfig.AtlasMaxShapes; attempt++)
-        {
-            int rx = radius;
-            int ry = Mathf.Max(FragmentRadiusYMin, Mathf.RoundToInt(radius * (FragmentAspectMin + (float)rng.NextDouble() * (1f - FragmentAspectMin))));
-            if (w <= rx * 2 + 2 || h <= ry * 2 + 2) return count;
-            int cx = rng.Next(rx + 1, w - rx - 1);
-            int cy = rng.Next(ry + 1, h - ry - 1);
-            if (px[cy * w + cx].a < OpaqueAlpha) continue;
-
-            int inside = 0, opaque = 0;
-            long r = 0, g = 0, b = 0;
-            for (int y = -ry; y <= ry; y++)
-                for (int x = -rx; x <= rx; x++)
-                {
-                    float dx = x / (float)rx, dy = y / (float)ry;
-                    if (dx * dx + dy * dy > 1f) continue;
-                    inside++;
-                    Color32 c = px[(cy + y) * w + cx + x];
-                    if (c.a < OpaqueAlpha) continue;
-                    opaque++;
-                    r += c.r;
-                    g += c.g;
-                    b += c.b;
-                }
-            if (opaque < inside * FoliageFXConfig.FragmentCoverMin) continue;
-            if (0.2126f * r / opaque + 0.7152f * g / opaque + 0.0722f * b / opaque < medianLum * FoliageFXConfig.LeafDarkShare) continue;
-            Color32 fill = new Color32((byte)(r / opaque), (byte)(g / opaque), (byte)(b / opaque), 0);
-            CopyTile(px, null, w, h, cx - rx, cy - ry, rx * 2 + 1, ry * 2 + 1, 0, true, fill, atlasPx, count);
-            count++;
-        }
-        return count;
-    }
-
     // Copies a source rectangle into atlas tile `index`, scaled to fit inside
-    // the padded tile and centred with its aspect kept. With `labels`, opaque
-    // texels that belong to anything else (other leaves, twigs) are dropped;
-    // with `ellipse`, the copy is trimmed to a soft-edged oval.
+    // the padded tile and centred with its aspect kept. Texels that belong to
+    // anything else (other leaves, twigs) are dropped.
     static void CopyTile(Color32[] px, int[] labels, int w, int h, int rx, int ry, int rw, int rh,
-        int blobId, bool ellipse, Color32 fill, Color32[] atlasPx, int index)
+        int blobId, Color32 fill, Color32[] atlasPx, int index)
     {
         int size = FoliageFXConfig.AtlasSize;
         int grid = FoliageFXConfig.AtlasGrid;
@@ -423,7 +518,6 @@ sealed class LeafSprites
         int fh = Mathf.Max(1, Mathf.RoundToInt(rh * scale));
         int x0 = tileX + pad + (inner - fw) / 2;
         int y0 = tileY + pad + (inner - fh) / 2;
-        float cx = rx + rw * 0.5f, cy = ry + rh * 0.5f;
         for (int ty = 0; ty < fh; ty++)
             for (int tx = 0; tx < fw; tx++)
             {
@@ -431,18 +525,12 @@ sealed class LeafSprites
                 float sy = ry + (ty + 0.5f) / scale - 0.5f;
                 Color32 c = Sample(px, w, h, sx, sy);
                 float a = c.a / 255f;
-                if (labels != null)
-                {
-                    int nx = Mathf.Clamp(Mathf.RoundToInt(sx), 0, w - 1);
-                    int ny = Mathf.Clamp(Mathf.RoundToInt(sy), 0, h - 1);
-                    int np = ny * w + nx;
-                    if (labels[np] != blobId && px[np].a >= OpaqueAlpha) a = 0f;
-                }
-                if (ellipse)
-                {
-                    float dx = (sx + 0.5f - cx) / (rw * 0.5f), dy = (sy + 0.5f - cy) / (rh * 0.5f);
-                    a *= Mathf.Clamp01((1f - Mathf.Sqrt(dx * dx + dy * dy)) * FragmentEdgeSharpness);
-                }
+                int nx = Mathf.Clamp(Mathf.RoundToInt(sx), 0, w - 1);
+                int ny = Mathf.Clamp(Mathf.RoundToInt(sy), 0, h - 1);
+                int np = ny * w + nx;
+                // Anything not the shape is dropped, other leaves and the soft
+                // edges of twigs alike, but for the shape's own soft rim.
+                if (labels[np] != blobId && !Touches(labels, w, h, nx, ny, blobId)) a = 0f;
                 byte alpha = (byte)Mathf.RoundToInt(a * 255f);
                 // A mostly see-through texel takes the fill colour, so the
                 // texture's background never fringes the leaf.
@@ -450,6 +538,12 @@ sealed class LeafSprites
                     ? new Color32(fill.r, fill.g, fill.b, alpha)
                     : new Color32(c.r, c.g, c.b, alpha);
             }
+    }
+
+    static bool Touches(int[] labels, int w, int h, int x, int y, int id)
+    {
+        return (x > 0 && labels[y * w + x - 1] == id) || (x < w - 1 && labels[y * w + x + 1] == id)
+            || (y > 0 && labels[(y - 1) * w + x] == id) || (y < h - 1 && labels[(y + 1) * w + x] == id);
     }
 
     static Color32 Sample(Color32[] px, int w, int h, float x, float y)

@@ -4,6 +4,12 @@
 # with VaM (then it also compiles the stripped sources) and on a bare Linux
 # runner (lint and packaging only).
 #
+# Every var is built here, so every var gets the same guard, dev or release,
+# from the pre-push hook, -Install or CI: the staged sources must be code
+# only (Strip --check), the var may hold only what is listed to ship, and no
+# text in it may carry a path on this machine, the account building it, an
+# e-mail address, a TODO-style marker or an AI assistant's name.
+#
 #   pwsh tools/pack.ps1                       # dev build: VampixCollections.FoliageFX-dev.<commits>.var, Version "dev"
 #   pwsh tools/pack.ps1 -Tag v3               # release build: Version "3"; needs Entry(3, ...) in Changelog.cs
 #   pwsh tools/pack.ps1 -Install              # also copy into <VaM>/AddonPackages
@@ -25,7 +31,15 @@ $package = "FoliageFX"
 $innerDir = "Custom/Scripts/Vampix Collections/FoliageFX"
 $cslist = "FoliageFX.cslist"
 $bundle = "FoliageFX.assetbundle"
-$deny = @('\.md$', '\.ps1$', '\.sh$', '\.shader$', '\.cginc$', '\.compute$', '\.csproj$', '\.zip$', '\.dll$', '\.png$', '^tools/', '^docs/', '^packaging/', '^\.github/', '^\.cursor/', '/Editor_')
+# Text no var may carry, whatever kind of build. The account and home folder
+# of the machine building it are added below, so no name is written here.
+$leaks = [ordered]@{
+    'a path on a drive' = '(?<![A-Za-z])[A-Za-z]:[\\/]'
+    'a home folder' = '[\\/](Users|home)[\\/]'
+    'an e-mail address' = '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}'
+    'a work-in-progress marker' = '(?-i)\b(TODO|FIXME|XXX|HACK)\b'
+    "an AI assistant's name" = '(?-i)\b(Claude|Anthropic|ChatGPT|OpenAI|Copilot)\b'
+}
 
 function Say($s) { if (-not $Quiet) { Write-Host $s } }
 function Fail($s) { Write-Error $s; exit 1 }
@@ -71,6 +85,8 @@ $stripDll = Get-ChildItem (Join-Path $stripProj "bin/Release") -Recurse -Filter 
 if (-not $stripDll) { Fail "Strip.dll not found after build" }
 & dotnet $stripDll.FullName (Join-Path $root $cslist) $stage
 if ($LASTEXITCODE -ne 0) { Fail "comment stripping failed" }
+& dotnet $stripDll.FullName --check $stage
+if ($LASTEXITCODE -ne 0) { Fail "the staged sources are not code only (above): no var ships a comment or a #region, #pragma or #if-dead line" }
 
 # the release number into the staged config
 $cfg = Join-Path $stage "Types/Core/FoliageFXConfig.cs"
@@ -164,19 +180,39 @@ try {
 $zip = [IO.Compression.ZipFile]::OpenRead($varPath)
 try {
     $entries = $zip.Entries | ForEach-Object { $_.FullName }
-    foreach ($e in $entries) { foreach ($d in $deny) { if ($e -match $d) { Fail "var contains '$e' (matches $d)" } } }
     $listed = Get-Content (Join-Path $root $cslist) | ForEach-Object { $_.Trim() } | Where-Object { $_ }
     foreach ($l in $listed) { if ($entries -notcontains "$innerDir/$l") { Fail "var lacks cslist entry $l" } }
-    foreach ($e in $entries) { if ($e -match '\.cs$' -and $e -notmatch '/Editor_' -and $listed -notcontains $e.Substring($innerDir.Length + 1)) { Fail "var contains a source not in the cslist: $e" } }
     if ($entries -notcontains "$innerDir/$bundle") { Fail "var lacks $bundle" }
-    foreach ($e in $entries) { if ($e -match "^Saves/") { Fail "var carries a Saves entry: $e" } }
+    # Only what is meant to ship: meta.json, the cslist and its sources, the
+    # bundle, and build.json on a dev build. Anything else, a doc, a tool, a
+    # shader source, a stray file, stops the build.
+    $allowed = @("meta.json", "$innerDir/$cslist", "$innerDir/$bundle") + @($listed | ForEach-Object { "$innerDir/$_" })
+    if ($release -eq 0) { $allowed += "$innerDir/build.json" }
+    foreach ($e in $entries) { if ($allowed -notcontains $e) { Fail "var carries '$e', which is not meant to ship" } }
     if ($release -eq 0 -and $entries -notcontains "$innerDir/build.json") { Fail "dev var lacks build.json" }
     if ($release -gt 0 -and $entries -contains "$innerDir/build.json") { Fail "release var must not carry build.json" }
     $stampedEntry = $zip.GetEntry("$innerDir/Types/Core/FoliageFXConfig.cs")
     $sr = [IO.StreamReader]::new($stampedEntry.Open()); $stamped = $sr.ReadToEnd(); $sr.Dispose()
     $want = if ($release -gt 0) { "$release" } else { "dev" }
     if ($stamped -notmatch ('Version = "' + $want + '";')) { Fail "Version in the var is not `"$want`"" }
-    if ([regex]::IsMatch($stamped, '(?m)^\s*//')) { Fail "comments survived stripping in FoliageFXConfig.cs" }
+    # Every text in the var, read as the user would get it.
+    $who = @()
+    foreach ($n in @($env:USERNAME, $env:USER, $(if ($env:USERPROFILE) { Split-Path $env:USERPROFILE -Leaf }), $(if ($env:HOME) { Split-Path $env:HOME -Leaf }))) {
+        if ($n -and $n.Length -ge 3 -and $who -notcontains $n) { $who += $n }
+    }
+    $found = @()
+    foreach ($entry in $zip.Entries) {
+        if ($entry.FullName -notmatch '\.(cs|cslist|json)$') { continue }
+        $sr = [IO.StreamReader]::new($entry.Open()); $text = $sr.ReadToEnd(); $sr.Dispose()
+        foreach ($k in $leaks.Keys) {
+            $m = [regex]::Match($text, $leaks[$k], 'IgnoreCase')
+            if ($m.Success) { $found += "$($entry.FullName): $k ('$($m.Value)')" }
+        }
+        foreach ($n in $who) {
+            if ([regex]::IsMatch($text, '\b' + [regex]::Escape($n) + '\b', 'IgnoreCase')) { $found += "$($entry.FullName): the name of the account building it" }
+        }
+    }
+    if ($found.Count -gt 0) { Fail ("text that must not reach users:`n" + ($found -join "`n")) }
     $null = ([IO.StreamReader]::new($zip.GetEntry("meta.json").Open())).ReadToEnd() | ConvertFrom-Json
 } finally { $zip.Dispose() }
 Remove-Item $stageRoot -Recurse -Force

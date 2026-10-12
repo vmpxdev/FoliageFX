@@ -16,7 +16,7 @@ every tree live in a rack with its state and switch, and an editor per material:
 Cutoff, Double-sided, Translucency, Drop Falling Leaves, with Reset to Defaults for the
 whole tree. Wind: a sway on
 every converted leaf, with strength, speed and direction. Falling Leaves: leaf shapes cut
-from each tree's own texture (rounded pieces where it has no separate leaves), dropping
+from each tree's own texture (none from a texture whose leaves cannot be cut out), dropping
 from the canopy at a rate per tree, drifting with the wind, lying on the ground for a
 while, casting shadows. Precedence: a FoliageFX on a CustomUnityAsset owns that tree, a
 scene-wide one looks after the rest. Scene persistence under stable keys with a schema
@@ -28,8 +28,8 @@ to every effect setting.
 - Presets. Settings and looks save with the scene only.
 - Tree looks saved by material name, outside a scene, so that any tree with that material
   would take them.
-- Leaves landing on real geometry. A falling leaf rests at its tree's ground, the bottom
-  of the asset's bounds, not on whatever lies under it.
+- Leaves landing on real geometry. A falling leaf rests on a flat plane at the height of
+  its tree's atom, not on whatever lies under it.
 - Per-tree wind. One wind for the scene.
 - Converting leaves on unlit shaders.
 

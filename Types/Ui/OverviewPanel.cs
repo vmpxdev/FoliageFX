@@ -11,7 +11,7 @@ using UnityEngine.UI;
 // The tree rows are made at runtime, as the Trees page makes its own: the
 // Trees page owns the pool, and hands its views here (SyncTrees) each time it
 // adds one. A dashboard tree row shows what that tree's rack row shows (its
-// state, its badge, and a switch only where the rack has one), so the two
+// state, its badge, and its switch greyed where the rack's is), so the two
 // never disagree about a tree another FoliageFX looks after.
 sealed class OverviewPanel
 {
@@ -252,7 +252,7 @@ sealed class OverviewPanel
             {
                 treesShown++;
                 s = e.View.OnState != null ? e.View.OnState() : "";
-                if (MirrorRack(e)) changed = true;
+                MirrorRack(e);
             }
             else if (!e.View.IsOn) s = e.View.OffState != null ? e.View.OffState : "off";
             else s = e.View.OnState != null ? e.View.OnState() : "on";
@@ -272,15 +272,11 @@ sealed class OverviewPanel
 
     // A tree's switch shows only where its rack row has one: a tree another
     // FoliageFX looks after has none.
-    static bool MirrorRack(Entry e)
+    // The switch greyed where the rack's is; nothing moves, so no resize.
+    static void MirrorRack(Entry e)
     {
         RackRow rack = e.View.Row;
-        if (rack == null || e.Row.Toggle == null) return false;
-        bool show = rack.Toggle == null || rack.Toggle.gameObject.activeSelf;
-        GameObject g = e.Row.Toggle.gameObject;
-        if (g.activeSelf == show) return false;
-        g.SetActive(show);
-        return true;
+        if (rack != null) e.Row.SetSwitchEnabled(rack.SwitchEnabled);
     }
 
     static void Badge(Entry e)

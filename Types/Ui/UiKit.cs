@@ -775,6 +775,22 @@ sealed class UiKit
         return btn;
     }
 
+    // A control that does nothing in this state: greyed and inert, kept in
+    // place so nothing around it moves.
+    public static void SetEnabled(UIDynamic control, bool on)
+    {
+        if (control == null) return;
+        CanvasGroup g = control.gameObject.GetComponent<CanvasGroup>();
+        if (g == null)
+        {
+            if (on) return;
+            g = control.gameObject.AddComponent<CanvasGroup>();
+        }
+        if (g.interactable == on) return;
+        g.interactable = on;
+        g.alpha = on ? 1f : FoliageFXConfig.SwitchOffAlpha;
+    }
+
     public void Paint(UIDynamicButton btn, Color bg, Color fg)
     {
         if (btn == null) return;
@@ -1041,7 +1057,12 @@ sealed class UiKit
             // One line at the button's own size; a name too long for it is cut
             // in the middle (RackRow.FitLabel), so every row reads alike.
             Text tx = row.Select.buttonText;
-            if (tx != null) tx.horizontalOverflow = HorizontalWrapMode.Overflow;
+            if (tx != null)
+            {
+                tx.resizeTextForBestFit = false;
+                tx.horizontalOverflow = HorizontalWrapMode.Overflow;
+                tx.gameObject.AddComponent<RowLabelFit>().Row = row;
+            }
             row.SetLabel(label);
             rackRows.Add(row);
             string rowId = id;
@@ -1133,6 +1154,17 @@ sealed class UiKit
                 }
                 row.Toggle = dyn;
             }
+        }
+        else
+        {
+            // No switch (a material): its room is kept, so the name and the
+            // state line up with the rows that have one.
+            GameObject gap = new GameObject("no_switch");
+            gap.transform.SetParent(strip, false);
+            LayoutElement gle = gap.AddComponent<LayoutElement>();
+            gle.flexibleWidth = 0f;
+            gle.preferredWidth = 84f;
+            gle.minWidth = 84f;
         }
         return row;
     }
@@ -1482,6 +1514,21 @@ sealed class CategoryBar
     }
 }
 
+// Cuts a rack row's label the moment its button is given a width, inside
+// Unity's layout pass and before the frame is drawn, so a row is never seen
+// with its whole label spilling past the button. FitTexts cuts it again when
+// the slow tick finds the width moved.
+sealed class RowLabelFit : MonoBehaviour
+{
+    public RackRow Row;
+
+    void OnRectTransformDimensionsChange()
+    {
+        RackRow row = Row;
+        if (row != null) OverlayLog.Probe(delegate { row.FitLabel(); return null; });
+    }
+}
+
 // The widgets of one rack row.
 sealed class RackRow
 {
@@ -1560,4 +1607,23 @@ sealed class RackRow
         if (Toggle == null || Toggle.toggle == null || Master == null) return;
         if (Toggle.toggle.isOn != Master.val) Toggle.toggle.isOn = Master.val;
     }
+
+    // A switch that does nothing here (a tree another FoliageFX looks after)
+    // stays in its place, greyed and inert, so every row keeps one layout;
+    // the badge beside it says why.
+    public bool SwitchEnabled { get { return switchGroup == null || switchGroup.interactable; } }
+
+    public void SetSwitchEnabled(bool on)
+    {
+        if (Toggle == null || on == SwitchEnabled) return;
+        if (switchGroup == null)
+        {
+            switchGroup = Toggle.gameObject.GetComponent<CanvasGroup>();
+            if (switchGroup == null) switchGroup = Toggle.gameObject.AddComponent<CanvasGroup>();
+        }
+        switchGroup.interactable = on;
+        switchGroup.alpha = on ? 1f : FoliageFXConfig.SwitchOffAlpha;
+    }
+
+    CanvasGroup switchGroup;
 }
