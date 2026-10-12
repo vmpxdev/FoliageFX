@@ -28,8 +28,8 @@ to every effect setting.
 - Presets. Settings and looks save with the scene only.
 - Tree looks saved by material name, outside a scene, so that any tree with that material
   would take them.
-- Leaves landing on real geometry. A falling leaf rests on a flat plane at the height of
-  its tree's atom, not on whatever lies under it.
+- Leaves landing on real geometry. A falling leaf rests on a flat plane 3 cm above its
+  tree's atom, not on whatever lies under it.
 - Per-tree wind. One wind for the scene.
 - Converting leaves on unlit shaders.
 

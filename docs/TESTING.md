@@ -138,9 +138,11 @@ shadows, so shade under a canopy is visible.
    drop, the flutter on top. Time On Ground: leaves lie where they land that long, then
    fade.
 3. Wind on: the falling leaves drift with the wind; turn Direction and the drift follows.
-4. Resting: leaves land at the height of the tree's atom, on the floor under the Sakura and
-   the ancient tree too (their roots reach below it), and lie flat; they do not land on
-   other atoms (PLAN: not in version 1).
+4. Resting: leaves land 3 cm above the height of the tree's atom and lie flat, full size,
+   for Time On Ground: on the floor under the Sakura and the ancient tree too (their roots
+   reach below it), and on VaM's Cyclorama floor, which is drawn above its collider (in
+   1.22's Artistic Showcase scene, a landed leaf stays in sight). They do not land on other
+   atoms (PLAN: not in version 1).
 5. Cast Shadows off: falling leaves cast no shadow; on: they do.
 6. Drop Falling Leaves off for one material: its leaves stop and its line reads "Falling
    leaves: off for this material."; the tree's other dropping materials carry on. A

@@ -95,6 +95,7 @@ sealed class FoliageFXConfig
     public const float LeafFallPathFactor = 1.6f;    // a leaf's lifetime covers this many times the straight drop
     public const float LeafWindDrift = 1.5f;         // metres per second of drift at wind strength 1
     public const float LeafCollisionRadius = 0.05f;  // of the particle size, so a leaf lands flat on the ground
+    public const float LeafRestLift = 0.03f;         // metres above the tree's base a leaf lands at: VaM's Cyclorama draws its floor 1.5 to 3 cm above its collider
     public const float LeafRestShrinkAt = 0.8f;      // a resting leaf shrinks away over its last fifth
 
     // Category ids for the panel bar. Fixed set; trees and effects are rack rows, not tabs.

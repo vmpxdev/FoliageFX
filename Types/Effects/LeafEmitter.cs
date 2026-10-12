@@ -82,7 +82,10 @@ sealed class LeafEmitter
 
         GameObject groundGo = new GameObject("ground");
         groundGo.transform.SetParent(go.transform, false);
-        groundGo.transform.position = new Vector3(canopy.center.x, groundY, canopy.center.z);
+        // A little above the tree's base: a leaf lying in the floor's own plane
+        // is drawn into it, and some floors are drawn above their collider,
+        // so a leaf at the base would vanish where it lands.
+        groundGo.transform.position = new Vector3(canopy.center.x, groundY + FoliageFXConfig.LeafRestLift, canopy.center.z);
         groundGo.transform.rotation = Quaternion.identity;
 
         GameObject restGo = new GameObject("resting");
@@ -111,7 +114,7 @@ sealed class LeafEmitter
         main.startRotationZ = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
 
         // The resting leaf is born flat (a quarter turn about X lays the quad
-        // on the ground), at a random heading, the size of the leaf that fell.
+        // on the ground), at a random heading, sized like a falling one (Apply).
         ParticleSystem.MainModule rest = e.Resting.main;
         rest.duration = 1f;
         rest.loop = false;
@@ -120,7 +123,6 @@ sealed class LeafEmitter
         rest.scalingMode = ParticleSystemScalingMode.Shape;
         rest.startSpeed = 0f;
         rest.gravityModifier = 0f;
-        rest.startSize = 1f;
         rest.startRotation3D = true;
         rest.startRotationX = Mathf.PI * 0.5f;
         rest.startRotationY = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
@@ -164,7 +166,10 @@ sealed class LeafEmitter
 
         ParticleSystem.SubEmittersModule sub = e.Falling.subEmitters;
         sub.enabled = true;
-        sub.AddSubEmitter(e.Resting, ParticleSystemSubEmitterType.Collision, ParticleSystemSubEmitterProperties.InheritSize);
+        // Nothing inherited: the ground ends the falling leaf's life, so its
+        // size there is the end of its shrink, and a resting leaf inheriting
+        // it was born at nothing.
+        sub.AddSubEmitter(e.Resting, ParticleSystemSubEmitterType.Collision, ParticleSystemSubEmitterProperties.InheritNothing);
 
         e.fallingRenderer = SetupRenderer(e.Falling, sprites, material);
         e.restingRenderer = SetupRenderer(e.Resting, sprites, material);
@@ -212,6 +217,7 @@ sealed class LeafEmitter
         ParticleSystem.SubEmittersModule sub = Falling.subEmitters;
         sub.enabled = restSeconds > 0f;
         ParticleSystem.MainModule rest = Resting.main;
+        rest.startSize = new ParticleSystem.MinMaxCurve(tileSize * SizeMinShare, tileSize * SizeMaxShare);
         float restTime = Mathf.Max(MinRestSeconds, restSeconds);
         rest.startLifetime = new ParticleSystem.MinMaxCurve(restTime * RestMinShare, restTime * RestMaxShare);
         rest.maxParticles = Mathf.Clamp(Mathf.CeilToInt(rate * restTime * RestingHeadroom) + ParticlesSpare,
