@@ -27,6 +27,7 @@ sealed class UiKit
     // the height the text actually renders at, so a caption or hint that wraps
     // further than guessed grows its pad (and its card) instead of spilling.
     readonly List<FitBox> fits = new List<FitBox>();
+    readonly List<RackRow> rackRows = new List<RackRow>();   // their labels are cut to fit (FitTexts)
     readonly MVRScript script;
 
     public UiKit(MVRScript script)
@@ -599,7 +600,41 @@ sealed class UiKit
             if (!f.Pad.gameObject.activeInHierarchy) continue;
             if (f.Apply()) changed = true;
         }
+        // Rack row labels are one line, so cutting one never changes a height.
+        for (int i = rackRows.Count - 1; i >= 0; i--)
+        {
+            RackRow r = rackRows[i];
+            if (r.Root == null) { rackRows.RemoveAt(i); continue; }
+            if (r.Root.activeInHierarchy) r.FitLabel();
+        }
         return changed;
+    }
+
+    static readonly string Ellipsis = ((char)0x2026).ToString();
+
+    // The label as wide as `width` allows, its middle given up for an
+    // ellipsis: a little more of the start than of the end, and never less of
+    // the end than a short "#N" suffix. Measured the way the Text measures its
+    // own preferred width. The whole label when it fits.
+    public static string MiddleCut(Text tx, string label, float width)
+    {
+        TextGenerationSettings settings = tx.GetGenerationSettings(Vector2.zero);
+        TextGenerator gen = tx.cachedTextGeneratorForLayout;
+        float scale = tx.pixelsPerUnit > 0f ? tx.pixelsPerUnit : 1f;
+        if (gen.GetPreferredWidth(label, settings) / scale <= width) return label;
+        int hash = label.LastIndexOf('#');
+        int suffix = hash > 0 && label.Length - hash <= 5 ? label.Length - hash : 0;
+        string best = Ellipsis;
+        int lo = 1, hi = label.Length - 1;
+        while (lo <= hi)
+        {
+            int keep = (lo + hi) / 2;
+            int tail = Mathf.Max(keep * 2 / 5, Mathf.Min(suffix, keep));
+            string cut = label.Substring(0, keep - tail) + Ellipsis + label.Substring(label.Length - tail);
+            if (gen.GetPreferredWidth(cut, settings) / scale <= width) { best = cut; lo = keep + 1; }
+            else hi = keep - 1;
+        }
+        return best;
     }
 
     // Lines a 24 px wrapped label needs in one column. An estimate from the
@@ -1003,6 +1038,12 @@ sealed class UiKit
         {
             LayoutElement le = row.Select.gameObject.GetComponent<LayoutElement>();
             if (le != null) { le.flexibleWidth = 1f; le.preferredWidth = 220f; le.minWidth = 140f; }
+            // One line at the button's own size; a name too long for it is cut
+            // in the middle (RackRow.FitLabel), so every row reads alike.
+            Text tx = row.Select.buttonText;
+            if (tx != null) tx.horizontalOverflow = HorizontalWrapMode.Overflow;
+            row.SetLabel(label);
+            rackRows.Add(row);
             string rowId = id;
             OverlayLog boundary = Log;
             row.Select.button.onClick.AddListener(delegate { OverlayLog.SafeRun(boundary, "select " + rowId, delegate { onSelect(rowId); }); });
@@ -1455,6 +1496,34 @@ sealed class RackRow
     public bool Selected;
     public bool Experimental;
     public bool Hovered;
+    string label;            // the whole label; the button may show it cut
+    float fitWidth = -1f;    // the width the shown label was cut for
+
+    // The row's label, for whatever it shows now (a pooled row's material);
+    // written only when it changed, then cut to the button.
+    public void SetLabel(string text)
+    {
+        if (Select == null || text == null || text == label) return;
+        label = text;
+        fitWidth = -1f;
+        Select.label = text;
+        FitLabel();
+    }
+
+    // A label wider than its button loses its middle ("CustomUni...Asset#2"),
+    // never its end: VaM tells duplicate atoms apart by the "#2" it appends.
+    // Cut at the width the text renders at, so only once the row is laid out,
+    // and again only when the label or that width changed.
+    public void FitLabel()
+    {
+        Text tx = Select != null ? Select.buttonText : null;
+        if (tx == null || label == null) return;
+        float width = tx.rectTransform.rect.width - FoliageFXConfig.RowLabelMargin;
+        if (width < 1f || Mathf.Abs(width - fitWidth) < 0.5f) return;
+        fitWidth = width;
+        string shown = UiKit.MiddleCut(tx, label, width);
+        if (Select.label != shown) Select.label = shown;
+    }
 
     // A state that begins with "needs " is a dependency: the badge shows and
     // the sentence goes to its tooltip; anything else is printed as the state.

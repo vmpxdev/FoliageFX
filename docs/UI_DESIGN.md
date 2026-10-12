@@ -17,7 +17,11 @@ or a column of sliders.
    effect setting regardless of what is visible. The tree editor's controls are the one
    exception: they mirror whichever material is selected, so they are kept off VaM's lists.
 3. **Custom widgets only for navigation, grouping, status, and actions**: the category bar,
-   rack rows, titles, captions, hint wells, cards, button rows.
+   rack rows, titles, captions, hint wells, cards, button rows. A choice among a few words
+   is a choice strip (`ChoiceStrip`, Live Skin's), and a choice among a tree's materials
+   is a list of rows: VaM opens a popup's list beside its own control, so every card after
+   it draws over the list, where a strip shows every choice at once. The Trees page has
+   no popup.
 4. **Progressive disclosure.** A handful of controls per inspector; anything a user rarely
    needs behind that effect's Advanced toggle (Shadow Fix's Convert Other Shaders).
    Advanced values are still storables.
@@ -36,31 +40,31 @@ The Trees page:
 ```
 | [Overview] [Trees] [Effects]                                                  |  category bar
 |---------------------------------------+---------------------------------------|
-| TREES                                 | Sakura 1                              |  editor title: the tree's uid
-| +-- Trees -------------------------+  | [x] Enabled                 (accent)  |  the tree's switch
-| | [Sakura 1] 3 of 5 converted  [x] |  | Status: 3 of 5 converted              |  live caption (top)
-| | [Sakura 2]   nothing to fix  [x] |  | Leaves that never receive shadows     |  guide
-| | [Ancient ]  own FoliageFX !      |  | are converted. Pick a material ...    |
-| | [Fern    ]          loading  [x] |  | +-- Materials ---------------------+  |  card
-| | [Bush    ]              off  [ ] |  | | Material  [g2Mat 1 [converted]]  |  |  filterable popup
+| TREES                                 | Sakura 1                              |  editor title: the atom's uid
+| +-- Atoms -------------------------+  | [x] Enabled                 (accent)  |  the tree's switch
+| | [Sakura 1  ]  3 of 5 conv.   [x] |  | Status: 3 of 5 converted              |  live caption (top)
+| | [Sakura 2  ]  nothing to fix [x] |  | Asset: Sakura_Tree                    |  the asset, as it is named
+| | [Ancient   ]  own FoliageFX !    |  | Leaves that never receive shadows     |  guide
+| | [Fern      ]       loading   [x] |  | are converted. Pick a material ...    |
+| | [Bush      ]           off   [ ] |  | +-- g2Mat 1 -----------------------+  |  card titled with the material
 | +----------------------------------+  | | Standard, queue 3000. Standard   |  |  live line: shader, queue,
-|                                       | | shader in Fade mode: never ...   |  |  the verdict's reason
-|                                       | | Falling leaves: off for this ... |  |  falling leaves line
-|                                       | | Mode                [Auto     v] |  |
-|                                       | +-- Look --------------------------+  |  card
-|                                       | | Tint                 [ picker ]  |  |
-|                                       | | Hue Shift (deg) ====o-----    0  |  |
-|                                       | | Saturation      =====o----    1  |  |
+| +-- Materials ---------------------+  | | shader in Fade mode: never ...   |  |  the verdict's reason
+| | [ Bark_C_0    ]       original   |  | | Mode                             |  |  subheader
+| | [ g2Mat 1     ]      converted   |  | | [ Auto ][ Convert ][Keep Orig.]  |  |  choice strip
+| | [ g2Mat 2     ]      converted   |  | | Converted: shadows, Wind, ...    |  |  mode line
+| +----------------------------------+  | +-- Look --------------------------+  |  card
+|                                       | | Tint                 [ picker ]  |  |  any material
+|                                       | | Hue Shift (deg) ====o-----    0  |  |  from here on, only while
+|                                       | | Saturation      =====o----    1  |  |  the mode converts it
 |                                       | | Brightness      =====o----    1  |  |
-|                                       | | Smoothness      ==o-------  0.2  |  |
+|                                       | | Gloss           ==o-------  0.2  |  |
 |                                       | +-- Leaves ------------------------+  |  card
 |                                       | | Alpha Cutoff    ====o-----  0.5  |  |
 |                                       | | [x] Double-sided                 |  |
 |                                       | | Translucency    o---------    0  |  |
 |                                       | | [x] Drop Falling Leaves          |  |
+|                                       | | Falling leaves: 15 leaf shapes...|  |  falling leaves line
 |                                       | +----------------------------------+  |
-|                                       | [ Reset Material ] [ Copy Look ]      |  Reset Material, Copy Look to Tree
-|                                       | [ Copy to Same Material Everywhere ]  |  Copy to Same Material Everywhere
 |                                       | [ Reset to Defaults ]                 |  footer: the whole tree
 |                                       | Every material of this tree back ...  |  its hint
 ```
@@ -77,25 +81,40 @@ line and guide, its cards, Show Advanced where it has an Advanced card, Reset to
   rebuilds the panel when it opens.
 - **Category bar**: three buttons, label plus hint, the active one in AccentPressed.
 - **Rack row**: select button (AccentPressed when selected), live state label, on/off
-  toggle. On the Effects rack the toggle is the effect's master. On the Trees rack it is
+  toggle. The select button's label is one line at the button's own size; a label too
+  long for it loses its middle ("CustomUni…Asset#2", `RackRow.FitLabel` with
+  `UiKit.MiddleCut`), never its end, where VaM puts the "#2" that tells duplicate atoms
+  apart. It is cut at the width the text renders at, in `FitTexts`, and again only when
+  the label or that width changes; the editor's titles show the whole name.
+  A tree's row, on the Trees rack and on the Overview, is named by its atom's uid alone.
+  On the Effects rack the toggle is the effect's master. On the Trees rack it is
   the tree's switch: a per-tree proxy storable (`Fix <uid>`, never registered) that writes
   `TreeLooks.SetEnabled` and touches the tree. A tree whose atom has its own FoliageFX
   shows the amber badge in its state box, with "This atom has its own FoliageFX, which
   takes precedence." in its tooltip, and no switch.
 - **The live rack**: `TreesPanel` keeps a pool of `FeatureView`s keyed by uid. A new
   CustomUnityAsset gets one through `shell.AddFeature` (id `tree:<uid>`), its row built
-  with `kit.RackRow` into the rack card (`kit.Split` set to the Trees pane and
+  with `kit.RackRow` into the rack card, titled Atoms so it does not repeat the page
+  title (`kit.Split` set to the Trees pane and
   `kit.Section` to the rack card), then `shell.Attach` and `shell.Apply`; a tree that
   leaves has its row hidden. A row's id is fixed, so a renamed atom gets a new row and its
   old one is hidden; an editor open on it reopens on the new row (`TreesPanel.Renamed`),
   without the material last picked on the old one. With no CustomUnityAsset in the scene
   the rack shows one caption: "No CustomUnityAsset atoms in the scene. Add a tree or plant
   asset and it appears here."
+- **The materials list**: under the rack, a Materials card with one row per material of
+  the selected tree, in the asset's order, each with its state (`LeafMaterial.StateLabel`)
+  and no switch; the picked one is painted as selected, and a click opens it in the
+  editor. The rows are a pool in `TreesPanel`, built with `kit.RackRow` into that card
+  when a tree has more materials than any before it and reused for the next tree; the
+  rows past the tree's count are hidden.
 - **The tree editor**: one shared editor in `TreesPanel`'s own bag, shown while the
-  selected feature is a tree. Its title is the tree's uid; then the tree's `Enabled` (the
-  same proxy as the row's switch), "Status: <state>" and the guide; the Materials, Look
-  and Leaves cards; two rows of buttons, Reset Material and Copy Look to Tree, then Copy to
-  Same Material Everywhere; and Reset to Defaults with its hint. Its controls are
+  selected feature is a tree. Its title is the atom's uid; then the tree's `Enabled` (the
+  same proxy as the row's switch), "Status: <state>", "Asset: <name>" with the asset the
+  atom has loaded, named as it is (`Tree.AssetName`: the placed prefab's own name, else
+  the file name in the Asset chooser's path while it loads), and the guide; the material
+  card (titled with the picked material's name), the Look and Leaves cards; and Reset to
+  Defaults with its hint. Its controls are
   `ParamSet` entries (feature `tree`, Volatile and Private, storable names `Tree <Param>
   <unit>`, prefix `Tree`). Selecting a tree or a material pushes the look into them with
   `valNoCallback`; a change writes the look, marks it customised, and calls
@@ -131,8 +150,8 @@ content leaves no gaps and nothing is rebuilt on navigation.
 
 | Category | Contents | Why |
 |---|---|---|
-| **Overview** ("Status and Trees") | (no rack) identity card: the FoliageFX title, the caption "Vampix Collections · <build line>", the global `Enabled`, the credit tagline, Copy Patreon Link; What's New scroll box and Full Changelog; Diagnostics card: the status line ("4 trees  ·  7 leaf materials converted", "Off  ·  original materials on every tree" with `Enabled` off, "No CustomUnityAsset atoms in the scene", "Loading the leaf shader", or the shader error), replaced with Technical Info on by the cost caption and its hints; Rescan; Technical Info and Show Hints, each with its hint; Diagnose with Technical Info. Right: the Trees card, one row per tree (its state and switch, click opens it), and the Effects card, one row per effect | whether the leaves are fixed, and on which trees, at a glance |
-| **Trees** ("Fix and Recolour") | the title card and the Trees rack (one row per CustomUnityAsset); the tree editor: Materials (Material, the live line, the falling leaves line, Mode), Look (Tint, Hue Shift, Saturation, Brightness, Smoothness), Leaves (Alpha Cutoff, Double-sided, Translucency, Drop Falling Leaves), Reset Material, Copy Look to Tree, Copy to Same Material Everywhere, Reset to Defaults | everything about one tree: what was converted and why, and how its leaves look |
+| **Overview** ("Status and Trees") | (no rack) identity card: the FoliageFX title, the caption "Vampix Collections · <build line>", the global `Enabled`, the credit tagline, Copy Patreon Link; What's New scroll box and Full Changelog; Diagnostics card: the status line ("4 trees  ·  7 leaf materials converted", "Off  ·  original materials on every tree" with `Enabled` off, "No CustomUnityAsset atoms in the scene", "Loading the leaf shader", or the shader error); Diagnose and Rescan; Show Hints with its hint. Right: the Trees card, one row per tree (its state and switch, click opens it), and the Effects card, one row per effect | whether the leaves are fixed, and on which trees, at a glance |
+| **Trees** ("Fix and Recolour") | the title card, the Atoms card (the rack, one row per CustomUnityAsset) and the selected tree's materials list; the tree editor: the material card (the live line, Mode, the mode line), Look (Tint; Hue Shift, Saturation, Brightness, Gloss while the mode converts the material), Leaves while it converts it (Alpha Cutoff, Double-sided, Translucency, Drop Falling Leaves, the falling leaves line), Reset to Defaults | everything about one tree: what was converted and why, and how its leaves look |
 | **Effects** ("Shadows, Wind, Leaves") | the Effects rack: Shadow Fix (Look: Soft Edges; Scope: All Atoms, on a CustomUnityAsset only; Advanced: Convert Other Shaders), Wind (Wind: Strength, Speed, Direction), Falling Leaves (Leaves: Rate, Size, Fall Speed, Time On Ground, Cast Shadows) | what applies to every tree |
 
 The caption under an inspector's `Enabled` has one shape: a "Status:" line carrying the
@@ -140,22 +159,21 @@ row's own state, then a static guide sentence (`FeatureView.Guide`):
 
 | Inspector | Guide |
 |---|---|
-| a tree | Leaves that never receive shadows are converted. Pick a material to check or change it. |
+| a tree | Leaves that never receive shadows are converted. Pick a material on the left to check or change it. |
 | Shadow Fix | Alpha-blended leaves never receive shadows in VaM. Converted to cutout leaves, they cast and receive shadows like the rest of the scene. |
 | Wind | A gentle sway on every converted leaf, and the direction falling leaves drift. |
 | Falling Leaves | Leaves cut from each tree's own texture drop from the canopy, drift with the wind and lie on the ground for a while. |
 
-With Technical Info on, every inspector caption also carries the effect's cost
-(`OnCost = life.CostText(id)`).
-
-The tree editor's Materials card: the Material popup (filterable) lists the materials by
-name and shows each as "<name>  [<state>]"; a live line under it reads "<shader>, queue
-N. <reason>" and then the falling leaves line; the Mode popup offers Auto, Convert and
-Keep original (ids `auto`, `convert`, `keep`). The buttons, in two rows: Reset Material
-puts the selected material's look back to its defaults; Copy Look to Tree gives the look
-to every converted material of this tree, each keeping its mode; then Copy to Same
-Material Everywhere gives it to the material of this name on every tree, mode included.
-Below them, Reset to Defaults resets every look of the tree and switches it on.
+The tree editor's material card is titled with the material picked in the list; its live
+line reads "<shader>, queue N. <reason>". Mode is a choice strip, Auto, Convert and Keep
+Original (ids `auto`, `convert`, `keep`), and the line under it says what the mode makes
+of the material, worked out from the mode rather than from the copy the next frame makes,
+so a click is answered at once. Wind, falling leaves and every part of the look but Tint
+work on a converted leaf only: Hue Shift, Saturation, Brightness, Gloss and the
+Leaves card show only while the mode converts the material, and for one it leaves as it
+is the line says so and that Convert brings them. The falling leaves line sits at the end
+of the Leaves card. Reset to Defaults, under the cards, resets every look of the tree and
+switches it on. Copying a look to other materials is planned (`docs/PLAN.md`, Next).
 
 ## 4. Persistence
 
@@ -165,7 +183,7 @@ Every storable is registered through `ParamSet` with a feature id and a scope:
 |---|---|---|
 | Look | every effect value and effect master: `Shadow Fix`, `Shadow Fix Soft Edges`, `Shadow Fix Convert Other Shaders`, `Wind`, `Wind Strength`, `Wind Speed`, `Wind Direction deg`, `Falling Leaves`, `Falling Leaves Rate`, `Falling Leaves Size mm`, `Falling Leaves Fall Speed m/s`, `Falling Leaves Time On Ground s`, `Falling Leaves Cast Shadows` | yes |
 | Scene | `Enabled` (`plugin.enabled`), `Shadow Fix All Atoms` | yes |
-| Ui | `Technical Info`, `Show Hints`, the category and the selection (`shell.category`, `shell.selected`), Show Advanced on Shadow Fix (`shadowfix.advanced`) | yes |
+| Ui | `Show Hints`, the category and the selection (`shell.category`, `shell.selected`), Show Advanced on Shadow Fix (`shadowfix.advanced`) | yes |
 | Volatile | the tree editor's controls (`tree.*`): they mirror the selected material's look, which saves in the `trees` node | no |
 | Private (flag) | off VaM's storable lists (Timeline, triggers): every Ui entry and the tree editor's controls | as its scope |
 
@@ -236,8 +254,8 @@ registered explicitly with each storable (`set.Float(Id, scope, "direction_deg",
 the registry rejects a key that is not lowercase snake case or is registered twice.
 
 A look in the `trees` node has keys of its own, schema like the rest: `mode`, `tint`,
-`hue`, `saturation`, `brightness`, `cutoff`, `smoothness`, `translucency`, `double_sided`,
-`falling`. `mode` stores the chooser id (`auto`, `convert`, `keep`), never the popup's
+`hue`, `saturation`, `brightness`, `cutoff`, `smoothness` (Gloss on the panel),
+`translucency`, `double_sided`, `falling`. `mode` stores the chooser id (`auto`, `convert`, `keep`), never the strip's
 words; `tint` is "h,s,v" in the invariant culture.
 
 ## 7. Live text
@@ -249,8 +267,9 @@ Never per-frame string building. The words:
 | Where | States |
 |---|---|
 | a tree's row and Status (`Tree.State`) | "3 of 5 converted", "nothing to fix", "loading", "own FoliageFX", "off" (the tree's own switch), "not converted" (its leaves wait for a fix that is not running: Shadow Fix or the master off, the leaf shader still loading) |
-| a material in the popup (`LeafMaterial.StateLabel`) | "converted", "converted, forced", "original", "original, tinted", "kept original", "other FoliageFX" |
+| a material in the list (`LeafMaterial.StateLabel`) | "converted", "converted, forced", "original", "original, tinted", "kept original", "other FoliageFX" |
 | the material's reason (`LeafRules`) | a sentence, such as "Standard shader in Fade mode: never receives shadows.", "Opaque or cutout: already receives shadows." or "Overlay: not foliage."; the live line gives the queue before it, so a reason never repeats it |
+| the mode line (`TreesPanel.ModeLine`) | "Converted: shadows, Wind, Falling Leaves and the whole look below apply to it.", "Auto leaves it as the asset made it, so only Tint applies. Convert it for wind, falling leaves and the rest of the look.", "Kept as the asset made it, so only Tint applies. Convert it for wind, falling leaves and the rest of the look.", "Converted once FoliageFX is enabled on the Overview.", "Converted once this tree is enabled.", "Converted once Shadow Fix is switched on, on the Effects page." |
 | the falling leaves line (`FallingLeaves.MaterialLine`) | "Falling leaves: 15 leaf shapes from the texture.", "Falling leaves: 16 rounded pieces of the texture, which has no separate leaves.", "Falling leaves: no usable leaf shapes in this texture.", "Falling leaves: finding leaf shapes...", "Falling leaves: off on the Effects page.", "Falling leaves: off for this material.", "Falling leaves: only from converted materials." |
 | Shadow Fix (`ShadowFix.State`) | "7 materials on 4 trees", "off", "no shader"; "hard edges (MSAA off)" appended when soft edges cannot apply |
 | Wind (`Wind.State`) | "off", "0.3 from 90°" |
@@ -263,11 +282,9 @@ Never per-frame string building. The words:
    section 8) and a feature id in `FoliageFXConfig`.
 2. Create its storables through `ParamSet` with the feature id, Look scope, and stable
    keys; storable names `<Feature> <Param> <unit>`.
-3. Its step in `Lifecycle`, in the documented order: a cost slot (a constant beside
-   `FeatShadowFix`, `FeatCount` raised, its id in `featureIds` and its name in
-   `featureNames`), and a delegate for its guarded call, built once in the constructor
-   beside `fnShadowFix` and run through `Guard` in `ApplyTree` (inside `log.RunOnce`,
-   timed).
+3. Its step in `Lifecycle`, in the documented order: a delegate for its guarded call,
+   built once in the constructor beside `fnShadowFix` and run in `ApplyTree` through
+   `log.RunOnce` with the effect's name.
 4. Its values compared in `PollSwitches` with the ones last applied, in fields beside
    `windStrength`: effect storables carry no callbacks, so this is how a change reaches
    the trees.
@@ -278,8 +295,8 @@ Never per-frame string building. The words:
 7. `BeginInspector(view, prefix)`, the guide, one `kit.BeginSection` card per
    functionality area with its controls and their hints, optional `BeginAdvanced`,
    `EndInspector`.
-8. Set `OnState`, `OnCost` (`life.CostText(id)`), `OnReset` (`paramSet.Reset(ParamSet.Look,
-   id)`, then `life.TouchAll`).
+8. Set `OnState` and `OnReset` (`paramSet.Reset(ParamSet.Look, id)`, then
+   `life.TouchAll`).
 9. The bar, the rack, selection and the scene block need nothing: they already know it.
 
 ## Credit and What's New
@@ -335,7 +352,7 @@ reach.
 | Tree Hue Shift deg | -180 to 180 | 0 |
 | Tree Saturation | 0 to 2 | 1 |
 | Tree Brightness | 0 to 2 | 1 |
-| Tree Smoothness | 0 to 1 | the source's, else 0.2 |
+| Tree Gloss | 0 to 1 | the source's, else 0.2 |
 | Tree Alpha Cutoff | 0.05 to 0.95 | 0.5 |
 | Tree Translucency | 0 to 2 | 0 |
 
@@ -352,7 +369,7 @@ The hints, exactly:
 
 | Control | Hint |
 |---|---|
-| Mode | Auto converts leaves that never receive shadows. Convert forces it for a material Auto missed; Keep original leaves it alone. |
+| Mode | Auto converts the leaves that never receive shadows. Convert forces a material Auto missed; Keep Original leaves it as the asset made it. |
 | Brightness | Darkens or lightens the leaves; 1 keeps the asset's own. |
 | Alpha Cutoff | How much of the leaf texture counts as leaf: lower keeps thin edges, higher trims them. |
 | Translucency | How much light shows through the leaves from behind. |
@@ -368,10 +385,9 @@ The hints, exactly:
 | Size | How big each falling leaf is. |
 | Fall Speed | How fast they drop; wind and flutter are on top. |
 | Time On Ground | How long a leaf lies where it lands before it fades. |
-| Technical Info | Adds costs and counts to the captions, and shows the Diagnose button used for debug logs. |
 | Show Hints | Shows short descriptions of what each setting does and other useful information. |
 
-The Look card's Tint, Hue Shift, Saturation and Smoothness each carry a hint too.
+The Look card's Tint, Hue Shift, Saturation and Gloss each carry a hint too.
 
 The story boxes:
 

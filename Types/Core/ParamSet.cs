@@ -190,8 +190,8 @@ sealed class ParamEntry
 //          in the scene
 //   Scene  this scene's setup (the master switch, which atoms are looked
 //          after), which an effect's Reset leaves alone; saved in the scene
-//   Ui     panel state (category, selection, advanced open, Technical
-//          Info, Show Hints); scene only
+//   Ui     panel state (category, selection, advanced open, Show Hints);
+//          scene only
 //   Volatile  the tree editor's controls, which mirror the selected
 //          material's look (the trees node saves that); never saved
 //   Private   (a flag beside a scope) kept off VaM's storable lists

@@ -15,6 +15,9 @@ using UnityEngine.EventSystems;
 // is destroyed with the panel, leaking nothing when the plugin is removed.
 // The dim backdrop and the card are siblings: a click on the dim area cancels,
 // a click on the card body is absorbed, and the two buttons carry the choice.
+// Neither the backdrop nor the card is a Selectable: their clicks come through
+// ModalClick, so a hover highlight that rings Selectables (VR Comfort's Hover
+// Glow) rings the buttons alone, and nothing treats the whole card as a button.
 //
 // The same card doubles as a notice (Notice): the message alone, no buttons,
 // a lighter backdrop, gone by itself after a moment or on any click; and as a
@@ -40,6 +43,7 @@ sealed class ConfirmBox
     RectTransform rowsRoot;   // InformRows: the table, in the well in place of the message
     readonly List<GameObject> rowObjects = new List<GameObject>();
     float noticeUntil;   // realtime the notice lowers itself; 0 while a confirm is up
+    ModalClick cardClick;   // a notice's dismiss on the card body; off otherwise
 
     public ConfirmBox(UiKit kit) { this.kit = kit; }
 
@@ -82,7 +86,7 @@ sealed class ConfirmBox
         if (confirmBtn != null) { confirmBtn.label = confirmLabel; kit.Paint(confirmBtn, FoliageFXConfig.Danger, FoliageFXConfig.OnDanger); Hover(confirmBtn, FoliageFXConfig.Danger); }
         SetMsgCap();
         root.transform.SetAsLastSibling();
-        root.SetActive(true);
+        Raise();
     }
 
     // A blocking alert in the plugin's look: a title, a message, and a single
@@ -104,7 +108,7 @@ sealed class ConfirmBox
         if (confirmBtn != null) { confirmBtn.label = dismissLabel; kit.Paint(confirmBtn, FoliageFXConfig.Accent, FoliageFXConfig.OnAccent); Hover(confirmBtn, FoliageFXConfig.Accent); }
         SetMsgCap();
         root.transform.SetAsLastSibling();
-        root.SetActive(true);
+        Raise();
     }
 
     // An Alert whose message is a table (a load report's summary): one
@@ -126,7 +130,7 @@ sealed class ConfirmBox
         if (confirmBtn != null) { confirmBtn.label = dismissLabel; kit.Paint(confirmBtn, FoliageFXConfig.Accent, FoliageFXConfig.OnAccent); Hover(confirmBtn, FoliageFXConfig.Accent); }
         SetMsgCap();
         root.transform.SetAsLastSibling();
-        root.SetActive(true);
+        Raise();
         Relayout();
     }
 
@@ -147,7 +151,7 @@ sealed class ConfirmBox
         if (dimImage != null) dimImage.color = new Color(0f, 0f, 0f, 0.25f);
         SetMsgCap();
         root.transform.SetAsLastSibling();
-        root.SetActive(true);
+        Raise();
     }
 
     // UI tick: a notice past its time goes away.
@@ -195,11 +199,21 @@ sealed class ConfirmBox
         UseRows(false);
     }
 
+    // Up, with the card taking clicks only while it is a notice: a confirm,
+    // an alert or a report leaves the card body without a click handler, so
+    // a click there does nothing and the buttons and the backdrop decide.
+    void Raise()
+    {
+        if (cardClick != null) cardClick.enabled = noticeUntil > 0f;
+        root.SetActive(true);
+    }
+
     public void Hide()
     {
         onConfirm = null;
         onCancel = null;
         noticeUntil = 0f;
+        if (cardClick != null) cardClick.enabled = false;
         if (root != null && root.activeSelf) root.SetActive(false);
     }
 
@@ -248,9 +262,10 @@ sealed class ConfirmBox
         dimg.color = new Color(0f, 0f, 0f, 0.66f);
         dimg.raycastTarget = true;
         dimImage = dimg;
-        Button dimBtn = dim.AddComponent<Button>();
-        dimBtn.transition = Selectable.Transition.None;
-        dimBtn.onClick.AddListener(delegate { OnCancelClick(); });
+        ModalClick dimClick = dim.AddComponent<ModalClick>();
+        dimClick.Log = kit.Log;
+        dimClick.What = "cancel the modal";
+        dimClick.Click = OnCancelClick;
 
         // Card, on top of the dim: the lighter surface tone so it lifts off the
         // dimmed page, height fit to content; the message sits in a darker well
@@ -266,11 +281,14 @@ sealed class ConfirmBox
         Image cbg = card.AddComponent<Image>();
         cbg.color = FoliageFXConfig.Surface;
         cbg.raycastTarget = true;   // absorbs clicks on the card body
-        // A notice dismisses on a click anywhere, the card included; a confirm or
-        // alert absorbs card-body clicks (its buttons and the backdrop decide).
-        Button cardBtn = card.AddComponent<Button>();
-        cardBtn.transition = Selectable.Transition.None;
-        cardBtn.onClick.AddListener(delegate { OnCardClick(); });
+        // A notice dismisses on a click anywhere, the card included (Raise
+        // switches this on for a notice alone); a confirm or alert absorbs
+        // card-body clicks in the Image above.
+        cardClick = card.AddComponent<ModalClick>();
+        cardClick.Log = kit.Log;
+        cardClick.What = "dismiss the notice";
+        cardClick.Click = OnCardClick;
+        cardClick.enabled = false;
         VerticalLayoutGroup v = card.AddComponent<VerticalLayoutGroup>();
         v.padding = new RectOffset(32, 32, 28, 28);
         v.spacing = 20f;
@@ -712,6 +730,21 @@ sealed class ModalInputSink : MonoBehaviour, IScrollHandler, IBeginDragHandler, 
     public void OnDrag(PointerEventData e) { }
     public void OnEndDrag(PointerEventData e) { }
     public void OnInitializePotentialDrag(PointerEventData e) { }
+}
+
+// A click on the modal's backdrop or card, inside the log's boundary. Not a
+// Selectable, unlike a Button: no hover ring, no pull toward it, no haptic
+// tick. A disabled one takes no click, and the click goes nowhere.
+sealed class ModalClick : MonoBehaviour, IPointerClickHandler
+{
+    public OverlayLog Log;
+    public string What;
+    public OverlayLog.Fn Click;
+
+    public void OnPointerClick(PointerEventData e)
+    {
+        if (Click != null) OverlayLog.SafeRun(Log, What, Click);
+    }
 }
 
 // A layout element whose preferred height is the content's own height plus a

@@ -1,10 +1,9 @@
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Text;
 using UnityEngine;
 
 // Owns the plugin's runtime: the master switch, the scan tick, the order the
-// effects run in on a tree, release, and the frame timing.
+// effects run in on a tree, and release.
 //
 //   Update: every SceneScanSeconds the registry scans (CustomUnityAsset
 //   atoms that came or went, precedence) and MSAA is read; then each dirty
@@ -26,24 +25,10 @@ using UnityEngine;
 // changes nothing in the scene.
 sealed class Lifecycle
 {
-    // Cost slots, one per effect, addressed by feature id.
-    const int FeatShadowFix = 0;
-    const int FeatWind = 1;
-    const int FeatFalling = 2;
-    const int FeatCount = 3;
-    static readonly string[] featureIds = new string[] { FoliageFXConfig.ShadowFixId, FoliageFXConfig.WindId, FoliageFXConfig.FallingId };
-    static readonly string[] featureNames = new string[] { "shadow fix", "wind", "falling leaves" };
-
     static readonly string Dot = "  " + ((char)0x00B7) + "  ";
 
     readonly OverlayLog log;
     readonly MVRScript script;
-    readonly Stopwatch watch = new Stopwatch();
-    readonly Stopwatch featWatch = new Stopwatch();
-    readonly float[] featFrame = new float[FeatCount];
-    readonly float[] featAvg = new float[FeatCount];
-    readonly float[] featPeak = new float[FeatCount];     // worst frame within the peak window
-    readonly float[] featPeakAt = new float[FeatCount];
 
     public TreeRegistry Trees;
     public ShadowFix ShadowFix;
@@ -70,15 +55,6 @@ sealed class Lifecycle
     // The effects' values as last applied.
     bool fixOn, softOn, otherOn, allOn, windOn, fallOn, fallShadows;
     float windStrength, windSpeed, windDirection, fallRate, fallSize, fallSpeed, fallRest;
-
-    // Frame timing for the Overview's caption and Diagnose.
-    float msAverage;
-    float msWorst;             // rolling peak: the highest frame within TimingPeakSeconds
-    float msWorstAt;
-    float sharedAvg;           // everything but the effects: the scan, the gathers, the checks
-    float budgetMs = 16.7f;    // the frame the game runs at, smoothed (includes our own cost)
-    float targetMs;            // the frame VaM aims for; 0 = no target, use the measured frame
-    int samples;
 
     // One delegate per guarded step, built once here: written at the call
     // site, each would be a fresh allocation every time a tree is applied.
@@ -165,11 +141,7 @@ sealed class Lifecycle
     public void Update()
     {
         if (held || !attached || Trees == null) return;
-        watch.Reset();
-        watch.Start();
         log.RunOnce("scene update", fnFrame);
-        watch.Stop();
-        RecordTiming((float)watch.Elapsed.TotalMilliseconds);
     }
 
     void Frame()
@@ -231,9 +203,9 @@ sealed class Lifecycle
         else if (looksAgain) RefreshLooks(t);
         if (master)
         {
-            Guard(FeatShadowFix, fnShadowFix);
-            Guard(FeatWind, fnWind);
-            Guard(FeatFalling, fnFalling);
+            log.RunOnce("shadow fix", "apply", fnShadowFix);
+            log.RunOnce("wind", "apply", fnWind);
+            log.RunOnce("falling leaves", "apply", fnFalling);
         }
         current = null;
     }
@@ -248,15 +220,6 @@ sealed class Lifecycle
             LeafMaterial m = t.Materials[i];
             if (!m.Foreign && m.Source != null) m.Look = Looks.Get(t.Key, m.Name, m.Source);
         }
-    }
-
-    void Guard(int feature, OverlayLog.Fn fn)
-    {
-        featWatch.Reset();
-        featWatch.Start();
-        log.RunOnce(featureNames[feature], "apply", fn);
-        featWatch.Stop();
-        featFrame[feature] += (float)featWatch.Elapsed.TotalMilliseconds;
     }
 
     void PollSwitches()
@@ -379,102 +342,6 @@ sealed class Lifecycle
         return trees + (trees == 1 ? " tree" : " trees") + Dot + converted + (converted == 1 ? " leaf material converted" : " leaf materials converted");
     }
 
-    void RecordTiming(float ms)
-    {
-        if (samples < FoliageFXConfig.TimingWindow) samples++;
-        msAverage += (ms - msAverage) / samples;
-        // A peak that never decays would only ever report the first scene
-        // load; this one forgets a spike once it is older than the window.
-        float now = Time.unscaledTime;
-        if (ms >= msWorst || now - msWorstAt > FoliageFXConfig.TimingPeakSeconds)
-        {
-            msWorst = ms;
-            msWorstAt = now;
-        }
-        float features = 0f;
-        for (int i = 0; i < FeatCount; i++)
-        {
-            featAvg[i] += (featFrame[i] - featAvg[i]) / samples;
-            if (featFrame[i] >= featPeak[i] || now - featPeakAt[i] > FoliageFXConfig.TimingPeakSeconds)
-            {
-                featPeak[i] = featFrame[i];
-                featPeakAt[i] = now;
-            }
-            features += featFrame[i];
-            featFrame[i] = 0f;
-        }
-        float shared = ms - features;
-        if (shared < 0f) shared = 0f;
-        sharedAvg += (shared - sharedAvg) / samples;
-        float dt = Time.unscaledDeltaTime * 1000f;
-        if (dt > 1f && dt < 200f) budgetMs += (dt - budgetMs) / samples;
-        // The share is against the frame the game aims for, not the one it
-        // gets: the measured frame already holds this plugin's cost.
-        int targetFps = Application.targetFrameRate;
-        targetMs = targetFps > 0 && targetFps <= FoliageFXConfig.TargetFpsMax ? 1000f / targetFps : 0f;
-    }
-
-    float FeaturesAvg
-    {
-        get
-        {
-            float sum = 0f;
-            for (int i = 0; i < FeatCount; i++) sum += featAvg[i];
-            return sum;
-        }
-    }
-
-    // The Overview card, two lines a user reads at a glance:
-    //   0.4 ms/frame  ·  2% of 60 fps
-    //   Features 0.1  ·  Shared 0.3  ·  Peak 3.2 ms
-    // A frame rate measured because VaM set no target is marked with a tilde.
-    public string TimingCaption()
-    {
-        bool known = targetMs > 0.5f;
-        float frame = known ? targetMs : budgetMs;
-        float fps = frame > 0.5f ? 1000f / frame : 0f;
-        int share = frame > 0.5f ? Mathf.RoundToInt(msAverage / frame * 100f) : 0;
-        string nl = ((char)10).ToString();
-        return msAverage.ToString("F1") + " ms/frame" + Dot + share + "% of " + (known ? "" : "~") + Mathf.RoundToInt(fps) + " fps" + nl
-            + "Features " + FeaturesAvg.ToString("F1") + Dot + "Shared " + sharedAvg.ToString("F1") + Dot + "Peak " + msWorst.ToString("F1") + " ms";
-    }
-
-    // "0.41 ms" for an inspector caption, empty while the effect costs nothing.
-    public string CostText(string featureId)
-    {
-        for (int i = 0; i < FeatCount; i++)
-            if (featureIds[i] == featureId)
-                return featAvg[i] >= FoliageFXConfig.TimingShowMs ? featAvg[i].ToString("F2") + " ms" : "";
-        return "";
-    }
-
-    // "0.42 ms per frame (3% of the 60 fps target), peak 3.1 ms"
-    string TimingLine()
-    {
-        bool known = targetMs > 0.5f;
-        float frame = known ? targetMs : budgetMs;
-        float fps = frame > 0.5f ? 1000f / frame : 0f;
-        int share = frame > 0.5f ? Mathf.RoundToInt(msAverage / frame * 100f) : 0;
-        return msAverage.ToString("F2") + " ms per frame (" + share + "% of " + (known ? "the " : "a measured ") + Mathf.RoundToInt(fps)
-            + " fps " + (known ? "target" : "frame") + "), peak " + msWorst.ToString("F1") + " ms";
-    }
-
-    // The effects that cost something this window, with a peak well above
-    // the average (a tree applied, an emitter made) named apart.
-    string FeatureTimingLine()
-    {
-        StringBuilder sb = new StringBuilder(96);
-        for (int i = 0; i < FeatCount; i++)
-        {
-            if (featAvg[i] < FoliageFXConfig.TimingShowMs && featPeak[i] < FoliageFXConfig.TimingShowMs) continue;
-            if (sb.Length > 0) sb.Append(", ");
-            sb.Append(featureNames[i]).Append(' ').Append(featAvg[i].ToString("F2"));
-            if (featPeak[i] > featAvg[i] * 3f && featPeak[i] > 0.5f) sb.Append(" (peak ").Append(featPeak[i].ToString("F1")).Append(')');
-        }
-        if (sb.Length > 0) sb.Append(" ms");
-        return sb.ToString();
-    }
-
     public void Describe(StringBuilder sb)
     {
         sb.Append(" | trees: ").Append(Trees.TreeCount);
@@ -502,9 +369,5 @@ sealed class Lifecycle
         sb.Append(" | master ").Append(master ? "on" : "off");
         if (held) sb.Append(" | held");
         sb.Append(" | scans ").Append(scans).Append(", gathers ").Append(gathers).Append(", MSAA ").Append(msaa ? "on" : "off");
-        sb.Append(" | cpu ").Append(TimingLine()).Append(": features ").Append(FeaturesAvg.ToString("F2"))
-          .Append(", shared ").Append(sharedAvg.ToString("F2")).Append(" ms");
-        string costs = FeatureTimingLine();
-        if (costs.Length > 0) sb.Append(" | per effect: ").Append(costs);
     }
 }

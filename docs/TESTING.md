@@ -27,9 +27,15 @@ shadows, so shade under a canopy is visible.
    abc1234" in a loose install, `Enabled`, the tagline, Copy Patreon Link, which reads
    "Copied to Clipboard" for a moment); What's New scrolls a couple of lines a wheel
    notch, and Full Changelog opens the notes in the modal; the Diagnostics card holds the
-   status line, Rescan, Technical Info and Show Hints, each toggle with its hint. The
+   status line, Diagnose, Rescan and Show Hints with its hint. The
    dashboard: a Trees card with one row per tree, an Effects card with Shadow Fix, Wind
-   and Falling Leaves, each with its state and switch; clicking a row opens it.
+   and Falling Leaves, each with its state (as on its rack row) and switch; clicking a
+   row opens it.
+   The modal, in the headset with VR Comfort's Hover Glow on (Full Changelog): no ring
+   on the dimmed backdrop or the card, a ring on Close; a click outside the card closes
+   it, a click on the card body does nothing; the wheel or stick over it never scrolls
+   the page behind. A confirm (Cancel and its action) and an alert behave the same, and
+   a notice still goes on any click, the card included.
 5. Effects: each inspector opens with `Enabled`, "Status: <state>" and its guide; Shadow
    Fix's story box has its two lines, Falling Leaves' its two. Show Hints off hides every
    hint line and story box; on brings them back.
@@ -68,32 +74,37 @@ shadows, so shade under a canopy is visible.
 
 ## Tree editor checklist
 
-1. Select a tree: the editor's title is its uid, then `Enabled`, "Status: <state>" and the
-   guide "Leaves that never receive shadows are converted. Pick a material to check or
-   change it."
-2. Material popup: every material on the asset as "<name>  [<state>]", filterable by
-   typing; a name that appears twice on the asset carries " #2". The live line reads
-   "<shader>, queue N. <reason>" and then the falling leaves line.
-3. Mode: Convert on a material Auto left alone converts it ("converted, forced") and it
-   takes shadows; Keep original on a converted one puts its original back ("kept
-   original"); Auto returns it to the verdict.
-4. Tint on a converted material recolours its leaves. Tint on an original material makes
+1. Select a tree: its row, its Overview row and the editor's title read the atom's uid. A
+   uid too long for its row keeps the row's text size and loses its middle
+   ("CustomUni…Asset#2"), never its "#N" end; the editor's title shows it whole. A
+   long material name in the list is cut the same way. Then `Enabled`, "Status:
+   <state>", "Asset: <name>" with the loaded asset exactly as it is named
+   ("Sakura_Tree", underscores and case kept), and the guide "Leaves that never
+   receive shadows are converted. Pick a material on the left to check or change it."
+2. Materials list (left, under the rack): every material on the asset with its state; a
+   name that appears twice on the asset carries " #2". Click one: it is painted
+   selected, the card on the right takes its name as title, and its live line reads
+   "<shader>, queue N. <reason>". Select a tree with fewer materials: the extra rows go.
+3. Mode strip: Convert on a material Auto left alone converts it ("converted, forced")
+   and it takes shadows; Hue Shift to Gloss and the Leaves card appear at once, and
+   the line under the strip reads "Converted: shadows, Wind, Falling Leaves and the whole
+   look below apply to it." Keep Original on a converted one puts its original back
+   ("kept original"), hides them, and the line says only Tint applies and that Convert
+   brings wind, falling leaves and the rest of the look; Auto returns it to the verdict.
+   A bark material on Auto shows Tint only, with the same line.
+4. Shadow Fix off (Effects): a leaf material on Auto reads "Converted once Shadow Fix is
+   switched on, on the Effects page." Its tree switched off: "Converted once this tree
+   is enabled." Nothing on the Trees page opens under a card: it has no popup.
+5. Tint on a converted material recolours its leaves. Tint on an original material makes
    a tinted copy ("original, tinted") and nothing else about it changes.
-5. Hue Shift, Saturation, Brightness and Smoothness change the converted leaves at once.
-   Only this tree re-applies: with Technical Info on, the cost shows one tree's work, not
-   every tree's.
-6. Alpha Cutoff: lower keeps thin edges, higher trims them. Double-sided off: the leaves'
+6. Hue Shift, Saturation, Brightness and Gloss change the converted leaves at once.
+   Only this tree re-applies (Diagnose's gathers count stays put).
+7. Alpha Cutoff: lower keeps thin edges, higher trims them. Double-sided off: the leaves'
    back faces disappear. Translucency up: light shows through the leaves from behind
    (stand under the canopy looking toward the light).
-7. Reset Material: the selected material back to its defaults, the controls with it.
-8. Copy Look to Tree: every converted material of this tree takes the look; each keeps its
-   own mode.
-9. Copy to Same Material Everywhere, with two Sakura atoms: the other tree's material of
-   that name takes the look, mode included; select the other tree and the editor shows the
-   copied values.
-10. Reset to Defaults: every look of the tree reset, the tree switched on.
-11. Switch a material in the popup while another is selected mid-edit: the controls show
-    the new material's look, and the old one keeps what it was given.
+8. Reset to Defaults: every look of the tree reset, the tree switched on.
+9. Pick another material in the list while one is mid-edit: the controls show the new
+   material's look, and the old one keeps what it was given.
 
 ## Shadow Fix checklist
 
@@ -154,8 +165,8 @@ shadows, so shade under a canopy is visible.
 4. Two scene-wide instances, which is not a supported setup but must stay safe: a session
    plugin plus one on an Empty atom in the scene, or one on a CustomUnityAsset with All
    Atoms on plus a scene-wide one. The first to convert a material keeps it; the other lists it as
-   "other FoliageFX" and leaves it, and neither reads the tree again on every scan (with
-   Technical Info on, Diagnose's gathers count stays put). Remove either: it gives back
+   "other FoliageFX" and leaves it, and neither reads the tree again on every scan
+   (Diagnose's gathers count stays put). Remove either: it gives back
    only the slots that still hold its own copies, and the other's work stays in place.
 
 ## Persistence checklist
@@ -178,25 +189,21 @@ shadows, so shade under a canopy is visible.
 7. Disable the plugin (its checkbox in the atom's Plugins tab): originals back, no falling
    leaves; enable: converted again within a scan.
 
-## Technical Info and Diagnose checklist
+## Diagnose checklist
 
-1. Technical Info on: the Overview's status line becomes the cost caption with its hints,
-   Diagnose shows, and every inspector caption carries the effect's cost. In a settled
-   scene the cost is near nothing: once every tree is applied, a frame only compares the
-   effects' values with the ones last applied. An edit or a scan shows as a peak.
-2. Diagnose: the report goes to VaM's Message Log, to the clipboard, and to a file under
+1. Diagnose: the report goes to VaM's Message Log, to the clipboard, and to a file under
    `Saves/PluginData/Vampix Collections/FoliageFX/Diagnostics/`; its Runtime section has a
    line each for "trees: ...", "shadow fix: ...", "wind: ...", "falling leaves: ...",
    "shader: ...", and the trees line ends with the copies and falling-leaf materials the
    plugin holds, "copies N, leaf materials M", which is what the checks for nothing held
    read.
-3. Rescan: everything released, the scene scanned at once, every tree applied again; the
+2. Rescan: everything released, the scene scanned at once, every tree applied again; the
    picture is the same afterwards.
 
 ## Asset switch checklist
 
 1. Switch a tree's asset to another on the same atom: the row reads "loading", then the
-   new asset's state; the editor's Material popup lists the new asset's materials; nothing
+   new asset's state, and the editor's Asset line its name; the materials list shows the new asset's materials; nothing
    of the old asset's copies or falling leaves remains (Diagnose's trees line).
 2. Switch back: the original asset is converted again, with its customised looks.
 
@@ -231,4 +238,4 @@ the second always looks exactly as without the plugin.
 
 Performance targets: once every tree is applied a frame only compares the effects' values
 (a dozen comparisons), a scan every 2 s, an edit re-applies one tree, 0 B/frame. Read them
-from the cost caption, average and peak.
+with Unity's profiler, or VaM's own frame timings, against the scene without the plugin.

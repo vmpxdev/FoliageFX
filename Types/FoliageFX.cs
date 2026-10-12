@@ -91,12 +91,11 @@ public class FoliageFX : MVRScript
 
         shell.BuildBar(kit);
         shell.Open(catOverview);
-        overview.Build(kit, shell, catOverview, log, diagnostics, life, testing.Technical, testing.Hints);
-        // The Overview switches take effect on the click, not on the next
-        // half-second UI tick (RefreshUI reads them and applies the shell).
+        overview.Build(kit, shell, catOverview, log, diagnostics, life, testing.Hints);
+        // Show Hints takes effect on the click, not on the next
+        // half-second UI tick (RefreshUI reads it and applies the shell).
         JSONStorableBool.SetBoolCallback onSwitch = delegate (bool v) { log.RunWarn("could not refresh the panel", RefreshUI); };
         if (testing.Hints != null) testing.Hints.setCallbackFunction = onSwitch;
-        if (testing.Technical != null) testing.Technical.setCallbackFunction = onSwitch;
         shell.Open(catTrees);
         trees.Build(kit, shell, catTrees, life, this, log);
         shell.Open(catEffects);
@@ -231,7 +230,6 @@ public class FoliageFX : MVRScript
         shell.Attach(UITransform);
         if (testing != null)
         {
-            FoliageFXConfig.TechnicalInfo = testing.Technical != null && testing.Technical.val;
             FoliageFXConfig.ShowHints = testing.Hints == null || testing.Hints.val;
         }
         shell.Apply();

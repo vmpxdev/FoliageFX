@@ -33,7 +33,7 @@ Leaves are off.
    CustomUnityAsset in the scene, and All Atoms is hidden and ignored (a trigger setting it
    changes nothing). A CustomUnityAsset whose atom carries its own FoliageFX is left to
    that one.
-4. Overview shows the status and every tree. With Technical Info on, **Diagnose** writes a
+4. Overview shows the status and every tree. **Diagnose** writes a
    report to VaM's Message Log, to the clipboard, and to a file under
    `Saves/PluginData/Vampix Collections/FoliageFX/Diagnostics/`, the only file the plugin
    writes.
@@ -42,24 +42,23 @@ Leaves are off.
 
 | Category | What lives there |
 |---|---|
-| Overview | identity card with the global `Enabled`, the credit line and Copy Patreon Link; the What's New scroll box and Full Changelog; Diagnostics (the status line, "4 trees · 7 leaf materials converted"; Rescan, Technical Info, Show Hints; with Technical Info on: the cost caption and its hints, and Diagnose), and a dashboard: a Trees card with every tree's state and switch, an Effects card with every effect's, click to open |
-| Trees | a rack of the scene's CustomUnityAssets, rows appearing and going as atoms are added and removed, each with its state and a switch; the tree editor on the right: the tree's `Enabled` and status, Materials (Material, the material's shader and verdict, Mode), Look (Tint, Hue Shift, Saturation, Brightness, Smoothness), Leaves (Alpha Cutoff, Double-sided, Translucency, Drop Falling Leaves), then Reset Material, Copy Look to Tree, Copy to Same Material Everywhere, and Reset to Defaults |
+| Overview | identity card with the global `Enabled`, the credit line and Copy Patreon Link; the What's New scroll box and Full Changelog; Diagnostics (the status line, "4 trees · 7 leaf materials converted"; Diagnose, Rescan, Show Hints), and a dashboard: a Trees card with every tree's state and switch, an Effects card with every effect's, click to open |
+| Trees | a rack of the scene's CustomUnityAssets by atom name, rows appearing and going as atoms are added and removed, each with its state and a switch, and under it the selected tree's materials; the tree editor on the right: the tree's `Enabled`, status and loaded asset, the material (its shader and verdict, Mode), Look (Tint; Hue Shift, Saturation, Brightness, Gloss), Leaves (Alpha Cutoff, Double-sided, Translucency, Drop Falling Leaves), then Reset to Defaults |
 | Effects | a rack of Shadow Fix, Wind and Falling Leaves, each with its inspector: Shadow Fix (Soft Edges; All Atoms when the plugin sits on a CustomUnityAsset; Convert Other Shaders under Advanced), Wind (Strength, Speed, Direction), Falling Leaves (Rate, Size, Fall Speed, Time On Ground, Cast Shadows) |
 
-Select a tree in the rack to open it on the right. Its Material popup lists every material
-on the asset with what was done to it ("converted", "original", "kept original"), and the
-line under it says which shader and queue the material is on and why it was or was not
-converted. Mode overrides the verdict for one material: Auto converts leaves that never
-receive shadows, Convert forces it for a material Auto missed, Keep original leaves it
-alone. Every change applies to that tree at once. Copy Look to Tree gives the look to every
-converted material of the tree (each keeps its mode); Copy to Same Material Everywhere gives
-it, mode included, to the material of that name on every tree.
+Select a tree in the rack: its materials are listed under the rack with what was done to
+each ("converted", "original", "kept original"), and the one you pick opens on the right,
+with the shader and queue it is on and why it was or was not converted. Mode overrides the
+verdict for one material: Auto converts leaves that never receive shadows, Convert forces
+a material Auto missed, Keep Original leaves it as the asset made it. Only Tint works on a
+material that is not converted; wind, falling leaves and the rest of the look need it
+converted, and the line under Mode says so. Every change applies to that tree at once.
 
 A tree whose atom has its own FoliageFX shows "own FoliageFX" and an amber badge in its row,
 and no switch: that instance takes precedence.
 
 Every effect setting is a plain JSONStorable, so Timeline, triggers, and other plugins can
-drive it whether or not it is visible; panel state, Technical Info, Show Hints and the tree
+drive it whether or not it is visible; panel state, Show Hints and the tree
 editor's controls (which mirror the selected material) are kept off those lists. Storable
 names follow `<Feature> <Param> <unit>`; inside its own inspector a control shows the short
 label (`Direction (deg)`).

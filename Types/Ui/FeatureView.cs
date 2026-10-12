@@ -29,7 +29,6 @@ sealed class FeatureView
     public string OffState;                  // the dashboard's word for off, when "off" would mislead (Soft Body Takeover: "default")
     public TextFn OnCaption;                 // inspector caption text (used when Guide is null)
     public string Guide;                     // the static sentence under Status: what the feature is for
-    public TextFn OnCost;                    // "0.41 ms" or empty, appended to the caption
     public Fn OnReset;                       // reset to defaults
 
     string lastState;
@@ -80,7 +79,7 @@ sealed class FeatureView
     // The first line is the row's own state, so it reads the same here and
     // on the rack; the second is the feature's sentence, with any leading
     // "Off." / "On," / "Needs X on:" the sentence used to carry stripped, since
-    // the status line now says it. Costs (Technical Info) sit on the Status line.
+    // the status line now says it.
     public void RefreshCaption()
     {
         if (Caption == null || (OnCaption == null && Guide == null)) return;
@@ -89,16 +88,11 @@ sealed class FeatureView
         // Status line, and anything that changes has its own place (the rack
         // badge, the brush card, the influence lines, Diagnose).
         string s = Guide != null ? Guide : Normalize(OnCaption());
-        string cost = FoliageFXConfig.TechnicalInfo && OnCost != null ? OnCost() : null;
-        // The cost (Technical Info) sits on the Status line, beside the state.
-        string status = "Status: " + Capitalize(state) + (!string.IsNullOrEmpty(cost) ? "  " + MiddleDot + "  " + cost : "");
-        string text = status + "\n" + s;
+        string text = "Status: " + Capitalize(state) + "\n" + s;
         if (text == lastCaption) return;
         lastCaption = text;
         Caption.text = text;
     }
-
-    static readonly string MiddleDot = ((char)0x00B7).ToString();
 
     static string Normalize(string s)
     {

@@ -35,7 +35,7 @@ Before changing code, read:
 
 - `FoliageFX` is a thin facade: VaM lifecycle, storable registration, scene JSON, page routing.
 - `Lifecycle` owns the master, the per-frame poll of the effects' values, the scan tick,
-  the effect order, release and timing. New steps are added there, in the documented
+  the effect order and release. New steps are added there, in the documented
   order, never elsewhere.
 - The Scene classes model what is in the scene: `TreeRegistry` finds the CustomUnityAsset
   atoms and decides precedence and scope; a `Tree` is one atom and its loader; a

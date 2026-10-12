@@ -4,9 +4,8 @@ using UnityEngine.UI;
 
 // Overview: the dashboard. Left: the identity card (name, brand, version,
 // the global master, the Patreon credit), the What's New scroll box, and
-// the Diagnostics card (a plain status line or, with Technical Info, the
-// cost caption; Diagnose to the Message Log, Rescan; the Technical Info and
-// Show Hints switches). Right: a Trees card with one live row per tree and
+// the Diagnostics card (the status line; Diagnose to the Message Log,
+// Rescan; the Show Hints switch). Right: a Trees card with one live row per tree and
 // an Effects card with one per effect (state and switch); a click opens it.
 //
 // The tree rows are made at runtime, as the Trees page makes its own: the
@@ -34,21 +33,17 @@ sealed class OverviewPanel
     // Dashboard rows live in their own bag, not the category's, so the shell
     // never re-shows what Refresh hid (a tree that left the scene).
     readonly List<GameObject> dashBag = new List<GameObject>();
-    // The status caption, the cost hints, and the Trees card's empty line:
+    // The status caption and the Trees card's empty line:
     // their own bags, or the shell's category bag would switch them back on
     // every tick.
     readonly List<GameObject> statusBag = new List<GameObject>();
-    readonly List<GameObject> techBag = new List<GameObject>();
     readonly List<GameObject> noTreesBag = new List<GameObject>();
-    JSONStorableBool technicalSwitch;
     UiKit kit;
     UiShell shell;
     SplitPane pane;                  // the Overview's two columns, for the rows made at runtime
     UiSection treesCard;
     Text status;
     string lastStatus;
-    UIDynamic costHint;              // the cost hints, shown with Technical Info
-    UIDynamicButton diagnose;        // shown with Technical Info
     UIDynamicButton copyPatreon;     // reads "Copied" for a moment after a click
     ConfirmBox confirm;              // the Full Changelog modal
     float copiedAt;                  // realtime of the last copy, 0 when the label is back
@@ -116,10 +111,9 @@ sealed class OverviewPanel
         if (OnEnabled != null) OnEnabled(value);
     }
 
-    public void Build(UiKit kit, UiShell shell, UiCategory cat, OverlayLog log, Diagnostics diagnostics, Lifecycle life, JSONStorableBool technical, JSONStorableBool hints)
+    public void Build(UiKit kit, UiShell shell, UiCategory cat, OverlayLog log, Diagnostics diagnostics, Lifecycle life, JSONStorableBool hints)
     {
         List<GameObject> bag = cat.Bag;
-        technicalSwitch = technical;
         this.kit = kit;
         this.shell = shell;
         pane = cat.Split;
@@ -156,23 +150,11 @@ sealed class OverviewPanel
 
         kit.BeginSection("Diagnostics", false, bag);
         status = kit.Caption("", false, statusBag, 2);
-        List<string> costHints = new List<string>();
-        costHints.Add("Under 10% of the frame goes unnoticed; past 25% costs frames.");
-        costHints.Add("A ~ before the frame rate means it was measured: VaM set no target (in VR, or with vsync off).");
-        costHints.Add("Shared is finding the CustomUnityAssets and reading their materials, whatever is switched on.");
-        costHints.Add("Peak is the slowest frame in the last 2 s; a spike when a tree is converted or rescanned is normal.");
-        costHint = kit.HintBox(costHints, false, techBag);
-        UiKit.SetBag(techBag, false);
         Transform row = kit.Row(false, FoliageFXConfig.RowH, bag);
-        diagnose = kit.Button(row, "Diagnose", FoliageFXConfig.Accent, FoliageFXConfig.OnAccent);
+        UIDynamicButton diagnose = kit.Button(row, "Diagnose", FoliageFXConfig.Button, FoliageFXConfig.OnButton);
         kit.Wire(diagnose, "diagnose", delegate { diagnostics.Report(); });
         UIDynamicButton rescan = kit.Button(row, "Rescan", FoliageFXConfig.Button, FoliageFXConfig.OnButton);
         kit.Wire(rescan, "rescan the trees", delegate { life.Rescan(); });
-        if (technical != null)
-        {
-            UIDynamicToggle t = kit.Toggle(technical, false, bag, "Adds costs and counts to the captions, and shows the Diagnose button used for debug logs.");
-            if (t != null) OverlayLog.Probe(delegate { t.label = "Technical Info"; return null; });
-        }
         if (hints != null)
         {
             UIDynamicToggle t = kit.Toggle(hints, false, bag, "Shows short descriptions of what each setting does and other useful information.");
@@ -242,7 +224,6 @@ sealed class OverviewPanel
 
     public void Refresh(Lifecycle life)
     {
-        bool technical = technicalSwitch != null && technicalSwitch.val;
         bool changed = false;
         if (confirm != null) confirm.Tick();
         if (copiedAt > 0f && Time.realtimeSinceStartup - copiedAt > FoliageFXConfig.CopiedLabelSeconds)
@@ -252,20 +233,12 @@ sealed class OverviewPanel
         }
         if (status != null)
         {
-            // The plugin's own main-thread cost with Technical Info; without it
-            // a plain verdict with no numbers. A leaf shader that failed to load
-            // is said either way: it is why nothing is converted.
-            bool failed = life.Shader != null && life.Shader.Failed;
-            string line = technical && !failed ? life.TimingCaption() : life.StatusLine();
+            string line = life.StatusLine();
             if (line != lastStatus) { lastStatus = line; status.text = line; }
             GameObject statusPad = status.transform.parent != null ? status.transform.parent.gameObject : null;
             bool showStatus = line.Length > 0;
             if (statusPad != null && statusPad.activeSelf != showStatus) { statusPad.SetActive(showStatus); changed = true; }
         }
-        // The cost hints are hints: Show Hints off keeps them out of sight too.
-        bool showCost = technical && FoliageFXConfig.ShowHints;
-        if (costHint != null && costHint.gameObject != null && costHint.gameObject.activeSelf != showCost) { costHint.gameObject.SetActive(showCost); changed = true; }
-        if (diagnose != null && diagnose.gameObject != null && diagnose.gameObject.activeSelf != technical) { diagnose.gameObject.SetActive(technical); changed = true; }
         int treesShown = 0;
         for (int i = 0; i < entries.Count; i++)
         {
@@ -282,13 +255,7 @@ sealed class OverviewPanel
                 if (MirrorRack(e)) changed = true;
             }
             else if (!e.View.IsOn) s = e.View.OffState != null ? e.View.OffState : "off";
-            else
-            {
-                // An effect's own rack row shows its state; the dashboard shows
-                // what it costs. On but idle reads "on".
-                string cost = technical ? life.CostText(e.View.Id) : "";
-                s = cost.Length > 0 ? cost : "on";
-            }
+            else s = e.View.OnState != null ? e.View.OnState() : "on";
             if (s != e.LastState && e.Row.State != null) { e.LastState = s; e.Row.SetState(s); }
             // SetState clears the badge (it is for "needs" states); a tree's
             // badge is its own, so it goes back on after.

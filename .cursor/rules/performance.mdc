@@ -8,8 +8,8 @@ alwaysApply: false
 
 Targets: once every tree is applied, a frame that only compares a dozen effect values with
 the ones last applied (the sway is the shader's, the falling leaves are Unity's particle
-systems), a scan every 2 s (`SceneScanSeconds`), an edit re-applies one tree, 0 B/frame. Measured with Technical Info on: the Overview's cost caption (average and
-peak) and each inspector's cost.
+systems), a scan every 2 s (`SceneScanSeconds`), an edit re-applies one tree, 0 B/frame. The plugin shows no timings of its own; measure
+with Unity's profiler, or VaM's frame timings, against the scene without the plugin.
 
 - Zero allocation per frame. The tree editor's callbacks and that per-frame comparison set
   dirty flags (the effects' storables carry no callbacks); the tree pass does the work, for

@@ -44,10 +44,6 @@ sealed class FoliageFXConfig
     public const float UiRefreshSeconds = 0.5f;      // live text, dashboard, the tree rack
     public const float SceneScanSeconds = 2f;        // new and gone CustomUnityAsset atoms, other instances, MSAA
     public const float SpriteJobTimeoutSeconds = 15f; // a leaf-shape extraction that never answers is dropped and retried
-    public const int TimingWindow = 120;             // frames averaged for the cost caption
-    public const float TimingPeakSeconds = 2f;       // the peak shown is the worst frame within this window
-    public const float TimingShowMs = 0.005f;        // an effect's average below this is not worth a line
-    public const int TargetFpsMax = 165;             // a frame rate target above this (VaM's uncapped 300) is not one a display reaches; the measured frame is used
 
     // Which materials are leaves that never receive shadows (LeafRules).
     // Unity's built-in pipeline never shadows the Transparent queue; a copy on
@@ -120,9 +116,6 @@ sealed class FoliageFXConfig
         for (int i = 0; i < ExperimentalFeatures.Length; i++) if (ExperimentalFeatures[i] == id) return true;
         return false;
     }
-    // Technical Info switch (Overview), set each UI tick: captions add their
-    // counts and milliseconds only while it is on; off, they speak plainly.
-    public static bool TechnicalInfo;
     // Show Hints switch (Overview), set each UI tick: the one-line hints under
     // the controls show while it is on; off, the cards are the controls alone.
     public static bool ShowHints = true;
@@ -168,6 +161,7 @@ sealed class FoliageFXConfig
     public static readonly Color TooltipBg = new Color(0.10f, 0.09f, 0.14f, 0.97f);
     public const float TooltipW = 360f;
     public const float RowStateMargin = 10f;   // right margin shared by a row's state text and its badge
+    public const float RowLabelMargin = 16f;   // a rack row's label is cut to its button less this, clear of the edges
     public static readonly Color Danger = new Color(0.769f, 0.169f, 0.227f, 1f);
     public static readonly Color OnDanger = Color.white;
     public static readonly Color Button = new Color(0.875f, 0.875f, 0.875f, 1f);

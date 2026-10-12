@@ -12,22 +12,22 @@ plugin's cutout leaf shader that casts and receives shadows, with soft edges und
 and an opt-in for transparent materials on other shaders; the asset's own materials are
 never edited, and the originals come back whenever the plugin lets go. The Trees page:
 every tree live in a rack with its state and switch, and an editor per material: Mode
-(Auto, Convert, Keep original), Tint, Hue Shift, Saturation, Brightness, Smoothness,
-Alpha Cutoff, Double-sided, Translucency, Drop Falling Leaves, with Reset Material, Copy
-Look to Tree, Copy to Same Material Everywhere and Reset to Defaults. Wind: a sway on
+(Auto, Convert, Keep Original), Tint, Hue Shift, Saturation, Brightness, Gloss, Alpha
+Cutoff, Double-sided, Translucency, Drop Falling Leaves, with Reset to Defaults for the
+whole tree. Wind: a sway on
 every converted leaf, with strength, speed and direction. Falling Leaves: leaf shapes cut
 from each tree's own texture (rounded pieces where it has no separate leaves), dropping
 from the canopy at a rate per tree, drifting with the wind, lying on the ground for a
 while, casting shadows. Precedence: a FoliageFX on a CustomUnityAsset owns that tree, a
 scene-wide one looks after the rest. Scene persistence under stable keys with a schema
-stamp, hints under the controls, Technical Info and Diagnose, Timeline and trigger access
+stamp, hints under the controls, Diagnose, Timeline and trigger access
 to every effect setting.
 
 ## Deliberately not in version 1
 
 - Presets. Settings and looks save with the scene only.
 - Tree looks saved by material name, outside a scene, so that any tree with that material
-  would take them. Within a scene, Copy to Same Material Everywhere does it by hand.
+  would take them.
 - Leaves landing on real geometry. A falling leaf rests at its tree's ground, the bottom
   of the asset's bounds, not on whatever lies under it.
 - Per-tree wind. One wind for the scene.
@@ -37,6 +37,12 @@ to every effect setting.
 
 Candidates the author has discussed, none designed yet:
 
+- Look buttons in the tree editor, taken out before version 1 to be done properly: Reset
+  Material (the picked material's look back to its defaults), Copy Look to Tree (the look
+  to every converted material of the tree, each keeping its mode) and Copy to Same
+  Material Everywhere (the look, mode included, to the material of that name on every
+  tree). The first build had them: `TreesPanel.ResetMaterial`, `CopyToTree`,
+  `CopyEverywhere` and `LeafLook.CopyFrom` in commit e0c83a9.
 - Seasons.
 - Canopy depth shading.
 - Distance limits.

@@ -45,7 +45,6 @@ sealed class EffectsPanel
         kit.Toggle(fix.OtherShaders, true, shadowFix.AdvancedBag, "Also converts transparent materials on shaders Auto does not know. Check the Trees page for anything it should not have touched.");
         shadowFix.OnState = delegate { return fix.State(life.Trees); };
         shadowFix.OnReset = delegate { set.Reset(ParamSet.Look, ShadowFix.Id); life.TouchAll(); };
-        shadowFix.OnCost = delegate { return life.CostText(ShadowFix.Id); };
         shell.EndInspector(shadowFix);
 
         // ---- Wind ----
@@ -56,7 +55,6 @@ sealed class EffectsPanel
         kit.Slider(w.Direction, true, wind.InspectorBag, "Which way the wind blows, in degrees around the scene.");
         wind.OnState = w.State;
         wind.OnReset = delegate { set.Reset(ParamSet.Look, Wind.Id); life.TouchAll(); };
-        wind.OnCost = delegate { return life.CostText(Wind.Id); };
         shell.EndInspector(wind);
 
         // ---- Falling Leaves ----
@@ -74,7 +72,6 @@ sealed class EffectsPanel
         kit.HintBox(fallStory, true, falling.InspectorBag);
         falling.OnState = fall.State;
         falling.OnReset = delegate { set.Reset(ParamSet.Look, FallingLeaves.Id); life.TouchAll(); };
-        falling.OnCost = delegate { return life.CostText(FallingLeaves.Id); };
         shell.EndInspector(falling);
     }
 

@@ -31,6 +31,8 @@ sealed class Tree
     readonly TreeRegistry registry;
     TreeLooks looks;
     float groundOffset;   // the asset's lowest point, below the loader
+    string assetName;
+    bool nameRead;
     CustomUnityAssetLoader.AssetLoadedCallback onLoaded;
     CustomUnityAssetLoader.AssetClearedCallback onCleared;
     bool hooked;
@@ -102,6 +104,48 @@ sealed class Tree
     {
         NeedsGather = true;
         Dirty = true;
+        nameRead = false;
+    }
+
+    // The asset the atom has loaded, as its maker named it ("Sakura_Tree"),
+    // for the tree editor: the loader places the prefab as "<prefab>(Clone)",
+    // in the prefab's own case; until that exists, the file name in the Asset
+    // chooser's path, which the bundle keeps in lower case. Null with no
+    // asset. Read again only when the loader loads or clears one.
+    public string AssetName
+    {
+        get
+        {
+            if (!nameRead)
+            {
+                nameRead = true;
+                assetName = ReadAssetName();
+            }
+            return assetName;
+        }
+    }
+
+    string ReadAssetName()
+    {
+        if (Loader == null) return null;
+        string name = null;
+        Transform root = Loader.transform;
+        for (int i = 0; i < root.childCount && name == null; i++)
+        {
+            string child = root.GetChild(i).name;
+            if (child.EndsWith("(Clone)", System.StringComparison.Ordinal)) name = child.Substring(0, child.Length - 7);
+        }
+        if (name == null)
+        {
+            JSONStorableStringChooser chooser = Loader.GetStringChooserJSONParam("assetName");
+            string path = chooser != null ? chooser.val : null;
+            if (string.IsNullOrEmpty(path) || path == "None") return null;
+            int slash = path.LastIndexOf('/');
+            name = slash >= 0 ? path.Substring(slash + 1) : path;
+            int dot = name.LastIndexOf('.');
+            if (dot > 0) name = name.Substring(0, dot);
+        }
+        return name.Length > 0 ? name : null;
     }
 
     // Mesh and skinned mesh renderers only: a particle or line renderer in

@@ -9,10 +9,15 @@ using UnityEngine.UI;
 // destroyed. Each row's switch is a proxy storable, never registered, that
 // writes the tree's switch into TreeLooks and has the tree applied again.
 //
-// The editor is built once and shows whichever tree is selected: its
-// controls are Volatile mirrors of the selected material's look. Selecting a
-// tree or a material pushes the look into them without callbacks; a change in
-// any of them writes all of them back into that look, marks it customised and
+// Under the rack, the selected tree's materials, one row each with what was
+// done to it; picking one opens it in the editor. The rows are a pool made as
+// a tree needs them and reused for the next tree, so a tree with many
+// materials is read at a glance instead of through a popup.
+//
+// The editor is built once and shows whichever material is picked: its
+// controls are Volatile mirrors of that material's look. Picking a tree or a
+// material pushes the look into them without callbacks; a change in any of
+// them writes all of them back into that look, marks it customised and
 // touches the tree. Nothing here converts anything: the next Update does.
 //
 // The editor lives in this panel's own bags, not in a feature's inspector,
@@ -20,9 +25,10 @@ using UnityEngine.UI;
 // it, so Sync does, after every shell Apply (OnApplied) and on the slow tick.
 sealed class TreesPanel
 {
-    const string Guide = "Leaves that never receive shadows are converted. Pick a material to check or change it.";
+    const string Guide = "Leaves that never receive shadows are converted. Pick a material on the left to check or change it.";
     const string OwnInstance = "This atom has its own FoliageFX, which takes precedence.";
     const string Empty = "No CustomUnityAsset atoms in the scene. Add a tree or plant asset and it appears here.";
+    const string TintOnly = "only Tint applies. Convert it for wind, falling leaves and the rest of the look.";
 
     // One rack row per atom uid, made once and hidden while its atom is gone.
     sealed class Row
@@ -36,21 +42,29 @@ sealed class TreesPanel
         public string LastMaterial;     // the material last picked on this tree
     }
 
+    // One row of the materials list; the material it shows changes with the tree.
+    sealed class MaterialRow
+    {
+        public RackRow Row;
+        public LeafMaterial Material;
+        public string LastState;
+    }
+
     // The dashboard makes its own row for each of these (OverviewPanel.SyncTrees).
     public readonly List<FeatureView> Views = new List<FeatureView>();
     public OverlayLog.Fn OnRowsAdded;
 
     readonly List<Row> rows = new List<Row>();
     readonly Dictionary<string, Row> byUid = new Dictionary<string, Row>();
+    readonly List<MaterialRow> materialRows = new List<MaterialRow>();
 
     // The editor's controls.
-    JSONStorableStringChooser material;
     JSONStorableStringChooser mode;
     JSONStorableColor tint;
     JSONStorableFloat hue;
     JSONStorableFloat saturation;
     JSONStorableFloat brightness;
-    JSONStorableFloat smoothness;
+    JSONStorableFloat gloss;
     JSONStorableFloat cutoff;
     JSONStorableFloat translucency;
     JSONStorableBool doubleSided;
@@ -68,17 +82,25 @@ sealed class TreesPanel
     OverlayLog log;
     UiCategory cat;
     UiSection rack;
+    UiSection list;
     UiSection header;
+    UiSection materialCard;
     UIDynamicToggle enabledToggle;
+    ChoiceStrip modeStrip;
     Text caption;
     // Disjoint bags, so each part shows on its own terms: the header and its
     // caption with any tree; the switch and the footer only for a tree this
-    // instance looks after; the Materials card when the tree has materials;
-    // the look's controls when the selected material has a look to edit.
+    // instance looks after; the materials list and the material card when the
+    // tree has materials; the mode and the tint when the picked material has
+    // a look to edit; the rest of the look and the Leaves card
+    // only while the material is meant to be converted, the one thing they
+    // work on.
     readonly List<GameObject> editorBag = new List<GameObject>();
     readonly List<GameObject> switchBag = new List<GameObject>();
+    readonly List<GameObject> listBag = new List<GameObject>();
     readonly List<GameObject> materialBag = new List<GameObject>();
     readonly List<GameObject> lookBag = new List<GameObject>();
+    readonly List<GameObject> leafBag = new List<GameObject>();
     readonly List<GameObject> footBag = new List<GameObject>();
     readonly List<GameObject> emptyBag = new List<GameObject>();
     // The hint lines among them: Show Hints keeps them out of sight.
@@ -87,10 +109,9 @@ sealed class TreesPanel
     Row selRow;
     LeafMaterial selMaterial;
     LeafLook pushedLook;
-    Tree shownTree;
-    readonly List<string> shownNames = new List<string>();
-    readonly List<string> shownStates = new List<string>();
     string capState;
+    string capAsset;
+    Tree capTree;
     bool capYielded;
     LeafMaterial lineMaterial;
     string lineText = "";
@@ -114,16 +135,7 @@ sealed class TreesPanel
     {
         const int scope = ParamSet.Volatile | ParamSet.Private;
         string id = FoliageFXConfig.TreeId;
-        List<string> modeIds = new List<string>();
-        modeIds.Add(FoliageFXConfig.ModeAuto);
-        modeIds.Add(FoliageFXConfig.ModeConvert);
-        modeIds.Add(FoliageFXConfig.ModeKeep);
-        List<string> modeNames = new List<string>();
-        modeNames.Add("Auto");
-        modeNames.Add("Convert");
-        modeNames.Add("Keep original");
-        material = set.Chooser(id, scope, "material", new JSONStorableStringChooser("Tree Material", new List<string>(), "", "Material", MaterialChanged));
-        mode = set.Chooser(id, scope, "mode", new JSONStorableStringChooser("Tree Mode", modeIds, modeNames, FoliageFXConfig.ModeAuto, "Mode", ModeChanged));
+        mode = set.Chooser(id, scope, "mode", new JSONStorableStringChooser("Tree Mode", ModeIds(), ModeLabels(), FoliageFXConfig.ModeAuto, "Mode", ModeChanged));
         HSVColor white = new HSVColor();
         white.H = 0f; white.S = 0f; white.V = 1f;
         tint = set.Color(id, scope, "tint", new JSONStorableColor("Tree Tint", white, TintChanged));
@@ -132,15 +144,35 @@ sealed class TreesPanel
         hue = set.Float(id, scope, "hue_shift_deg", new JSONStorableFloat("Tree Hue Shift deg", 0f, FloatChanged, -180f, 180f, true));
         saturation = set.Float(id, scope, "saturation", new JSONStorableFloat("Tree Saturation", 1f, FloatChanged, 0f, 2f, true));
         brightness = set.Float(id, scope, "brightness", new JSONStorableFloat("Tree Brightness", 1f, FloatChanged, 0f, 2f, true));
-        smoothness = set.Float(id, scope, "smoothness", new JSONStorableFloat("Tree Smoothness", 0.2f, FloatChanged, 0f, 1f, true));
+        // Gloss is the look's smoothness, the Standard shader's _Glossiness.
+        gloss = set.Float(id, scope, "gloss", new JSONStorableFloat("Tree Gloss", 0.2f, FloatChanged, 0f, 1f, true));
         cutoff = set.Float(id, scope, "alpha_cutoff", new JSONStorableFloat("Tree Alpha Cutoff", 0.5f, FloatChanged, 0.05f, 0.95f, true));
         translucency = set.Float(id, scope, "translucency", new JSONStorableFloat("Tree Translucency", 0f, FloatChanged, 0f, 2f, true));
         doubleSided = set.Bool(id, scope, "double_sided", new JSONStorableBool("Tree Double-sided", true, BoolChanged));
         dropLeaves = set.Bool(id, scope, "drop_falling_leaves", new JSONStorableBool("Tree Drop Falling Leaves", true, BoolChanged));
     }
 
-    // Left: the page title and the rack card, empty until the scan finds a
-    // tree. Right: the editor. Call with the Trees pane open.
+    static List<string> ModeIds()
+    {
+        List<string> ids = new List<string>();
+        ids.Add(FoliageFXConfig.ModeAuto);
+        ids.Add(FoliageFXConfig.ModeConvert);
+        ids.Add(FoliageFXConfig.ModeKeep);
+        return ids;
+    }
+
+    static List<string> ModeLabels()
+    {
+        List<string> labels = new List<string>();
+        labels.Add("Auto");
+        labels.Add("Convert");
+        labels.Add("Keep Original");
+        return labels;
+    }
+
+    // Left: the page title, the rack card, empty until the scan finds a tree,
+    // and the picked tree's materials. Right: the editor. Call with the Trees
+    // pane open.
     public void Build(UiKit kit, UiShell shell, UiCategory cat, Lifecycle life, MVRScript script, OverlayLog log)
     {
         this.kit = kit;
@@ -154,7 +186,8 @@ sealed class TreesPanel
         kit.EndSection();
         // The rack card is one of the category's groups, so the shell hides it
         // while every row in it is hidden, as it does for a fixed rack.
-        rack = kit.BeginSection("Trees", false, cat.Bag);
+        // Titled for what its rows are, so it does not repeat the page title.
+        rack = kit.BeginSection("Atoms", false, cat.Bag);
         kit.EndSection();
         cat.Groups.Add(rack);
         cat.GroupMembers.Add(new List<FeatureView>());
@@ -162,6 +195,9 @@ sealed class TreesPanel
         // features at all, and the pool keeps the rows of trees that left, so
         // this one is the panel's own.
         kit.Caption(Empty, false, emptyBag);
+        // Its rows arrive with the first tree that has materials (SyncList).
+        list = kit.BeginSection("Materials", false, listBag);
+        kit.EndSection();
 
         kit.Prefix = "Tree";
         header = kit.BeginSection("Tree", true, editorBag, 32);
@@ -171,43 +207,38 @@ sealed class TreesPanel
         caption = kit.Caption("", true, editorBag, 3);
         kit.EndSection();
 
-        kit.BeginSection("Materials", true, materialBag);
-        MaterialPopup(materialBag);
+        // Titled with the picked material's name (SyncEditor).
+        materialCard = kit.BeginSection("Material", true, materialBag);
         kit.LiveLine(ShaderLine, true, materialBag, 2);
-        kit.LiveLine(FallingLine, true, materialBag, 1);
-        kit.Popup(mode, true, lookBag);
-        Hint("Auto converts leaves that never receive shadows. Convert forces it for a material Auto missed; Keep original leaves it alone.", lookBag);
+        kit.SubHeader("Mode", true, lookBag);
+        modeStrip = new ChoiceStrip(kit, kit.Row(true, FoliageFXConfig.RowH, lookBag), mode, ModeIds(), ModeLabels());
+        modeStrip.OnPick = AfterModePick;
+        kit.LiveLine(ModeLine, true, lookBag, 2);
+        Hint("Auto converts the leaves that never receive shadows. Convert forces a material Auto missed; Keep Original leaves it as the asset made it.", lookBag);
 
         kit.BeginSection("Look", true, lookBag);
         kit.ColorPicker(tint, true, lookBag);
         Hint("Colours the leaves: white keeps the asset's own colour.", lookBag);
-        kit.Slider(hue, true, lookBag);
-        Hint("Turns the leaf colours around the colour wheel: lower turns green to yellow and red.", lookBag);
-        kit.Slider(saturation, true, lookBag);
-        Hint("How vivid the colours are: 0 is grey, higher is richer.", lookBag);
-        kit.Slider(brightness, true, lookBag);
-        Hint("Darkens or lightens the leaves; 1 keeps the asset's own.", lookBag);
-        kit.Slider(smoothness, true, lookBag);
-        Hint("How glossy the leaves are: higher gives sharper highlights.", lookBag);
+        kit.Slider(hue, true, leafBag);
+        Hint("Turns the leaf colours around the colour wheel: lower turns green to yellow and red.", leafBag);
+        kit.Slider(saturation, true, leafBag);
+        Hint("How vivid the colours are: 0 is grey, higher is richer.", leafBag);
+        kit.Slider(brightness, true, leafBag);
+        Hint("Darkens or lightens the leaves; 1 keeps the asset's own.", leafBag);
+        kit.Slider(gloss, true, leafBag);
+        Hint("How shiny the leaves are: higher gives sharper highlights.", leafBag);
 
-        kit.BeginSection("Leaves", true, lookBag);
-        kit.Slider(cutoff, true, lookBag);
-        Hint("How much of the leaf texture counts as leaf: lower keeps thin edges, higher trims them.", lookBag);
-        kit.Toggle(doubleSided, true, lookBag);
-        kit.Slider(translucency, true, lookBag);
-        Hint("How much light shows through the leaves from behind.", lookBag);
-        kit.Toggle(dropLeaves, true, lookBag);
-        Hint("This material's leaves fall when Falling Leaves is on.", lookBag);
+        kit.BeginSection("Leaves", true, leafBag);
+        kit.Slider(cutoff, true, leafBag);
+        Hint("How much of the leaf texture counts as leaf: lower keeps thin edges, higher trims them.", leafBag);
+        kit.Toggle(doubleSided, true, leafBag);
+        kit.Slider(translucency, true, leafBag);
+        Hint("How much light shows through the leaves from behind.", leafBag);
+        kit.Toggle(dropLeaves, true, leafBag);
+        Hint("This material's leaves fall when Falling Leaves is on.", leafBag);
+        kit.LiveLine(FallingLine, true, leafBag, 1);
         kit.EndSection();
 
-        Transform first = kit.Row(true, FoliageFXConfig.RowH, lookBag);
-        UIDynamicButton reset = kit.Button(first, "Reset Material", FoliageFXConfig.Button, FoliageFXConfig.OnButton);
-        kit.Wire(reset, "reset a material's look", ResetMaterial);
-        UIDynamicButton toTree = kit.Button(first, "Copy Look to Tree", FoliageFXConfig.Button, FoliageFXConfig.OnButton);
-        kit.Wire(toTree, "copy a look to the tree", CopyToTree);
-        Transform second = kit.Row(true, FoliageFXConfig.RowH, lookBag);
-        UIDynamicButton everywhere = kit.Button(second, "Copy to Same Material Everywhere", FoliageFXConfig.Button, FoliageFXConfig.OnButton);
-        kit.Wire(everywhere, "copy a look to every tree", CopyEverywhere);
         Transform foot = kit.Row(true, FoliageFXConfig.RowH, footBag);
         UIDynamicButton defaults = kit.Button(foot, "Reset to Defaults", FoliageFXConfig.Button, FoliageFXConfig.OnButton);
         kit.Wire(defaults, "reset the tree", ResetTree);
@@ -216,22 +247,12 @@ sealed class TreesPanel
 
         Show(editorBag, false);
         Show(switchBag, false);
+        Show(listBag, false);
         Show(materialBag, false);
         Show(lookBag, false);
+        Show(leafBag, false);
         Show(footBag, false);
         Show(emptyBag, true);
-    }
-
-    // The kit's popups scroll; this one filters, since an asset can carry
-    // dozens of materials. Routed into the open card as the kit routes its own.
-    void MaterialPopup(List<GameObject> bag)
-    {
-        UIDynamicPopup p = script.CreateFilterablePopup(material, true);
-        if (p == null) return;
-        string label = kit.Pretty(material.name);
-        OverlayLog.Probe(delegate { p.label = label; return null; });
-        bag.Add(p.gameObject);
-        if (kit.Section != null) kit.Section.Items.Add(p.gameObject);
     }
 
     // A hint line under the control above it, remembered so Show keeps it
@@ -403,26 +424,34 @@ sealed class TreesPanel
         bool hasMaterials = show && !yielded && t.Materials.Count > 0;
         bool editable = hasMaterials && m != null && m.Look != null;
 
-        bool changed = Show(editorBag, show);
+        bool changed = SyncList(hasMaterials ? t : null);
+        changed = Show(editorBag, show) | changed;
         changed = Show(switchBag, show && !yielded) | changed;
+        changed = Show(listBag, hasMaterials) | changed;
         changed = Show(materialBag, hasMaterials) | changed;
         changed = Show(lookBag, editable) | changed;
+        changed = Show(leafBag, editable && m.WantsLeaf(true)) | changed;
         changed = Show(footBag, show && !yielded) | changed;
         changed = Show(emptyBag, visibleRows == 0) | changed;
         if (show)
         {
             Bind(r.Proxy);
             if (header != null && header.TitleText != null && header.TitleText.text != t.Uid) header.TitleText.text = t.Uid;
+            // The asset the atom has loaded, by its own name, under the status.
             string state = t.State();
-            if (caption != null && (state != capState || yielded != capYielded))
+            string asset = t.AssetName;
+            if (caption != null && (state != capState || yielded != capYielded || t != capTree || asset != capAsset))
             {
                 capState = state;
                 capYielded = yielded;
-                caption.text = "Status: " + Capitalize(state) + "\n" + (yielded ? OwnInstance : Guide);
+                capTree = t;
+                capAsset = asset;
+                caption.text = "Status: " + Capitalize(state) + (asset != null ? "\nAsset: " + asset : "") + "\n" + (yielded ? OwnInstance : Guide);
             }
-            if (hasMaterials) SyncChoices(t);
         }
+        if (m != null && materialCard != null && materialCard.TitleText != null && materialCard.TitleText.text != m.Name) materialCard.TitleText.text = m.Name;
         if (editable && m.Look != pushedLook) Push(m.Look);
+        if (modeStrip != null) modeStrip.Repaint();
         // Another material's lines now, not a slow tick later.
         if (m != linesFor)
         {
@@ -469,35 +498,81 @@ sealed class TreesPanel
         return null;
     }
 
-    // "g2Mat 1  [converted]": rebuilt only when a name or a state changed,
-    // so a tick with nothing new allocates nothing.
-    void SyncChoices(Tree t)
+    // ---- the materials list ----
+
+    // "g2Mat 1   converted": one row per material of the tree, in the order
+    // the asset lists them, the picked one painted as selected. Rows are made
+    // only when a tree has more materials than any before it; a row's text is
+    // written only when its material or state changed. True when a row was
+    // made, shown or hidden.
+    bool SyncList(Tree t)
     {
-        List<LeafMaterial> mats = t.Materials;
-        bool same = shownTree == t && shownNames.Count == mats.Count;
-        for (int i = 0; same && i < mats.Count; i++)
-            if (shownNames[i] != mats[i].Name || shownStates[i] != mats[i].StateLabel()) same = false;
-        if (!same)
+        int count = t != null ? t.Materials.Count : 0;
+        bool changed = false;
+        if (materialRows.Count < count)
         {
-            shownTree = t;
-            shownNames.Clear();
-            shownStates.Clear();
-            List<string> names = new List<string>(mats.Count);
-            List<string> labels = new List<string>(mats.Count);
-            for (int i = 0; i < mats.Count; i++)
-            {
-                string state = mats[i].StateLabel();
-                names.Add(mats[i].Name);
-                labels.Add(mats[i].Name + "  [" + state + "]");
-                shownNames.Add(mats[i].Name);
-                shownStates.Add(state);
-            }
-            // Fresh lists: the chooser only re-reads a list it has not seen.
-            material.choices = names;
-            material.displayChoices = labels;
+            SplitPane split = kit.Split;
+            UiSection section = kit.Section;
+            kit.Split = cat.Split;
+            kit.Section = list;
+            while (materialRows.Count < count) MakeMaterialRow(materialRows.Count);
+            kit.Split = split;
+            kit.Section = section;
+            shell.Attach(script.UITransform);
+            changed = true;
         }
-        string val = selMaterial != null ? selMaterial.Name : "";
-        if (material.val != val) material.valNoCallback = val;
+        for (int i = 0; i < materialRows.Count; i++)
+        {
+            MaterialRow mr = materialRows[i];
+            bool on = i < count;
+            GameObject g = mr.Row.Root;
+            if (g != null && g.activeSelf != on)
+            {
+                g.SetActive(on);
+                changed = true;
+            }
+            if (!on)
+            {
+                mr.Material = null;
+                continue;
+            }
+            LeafMaterial m = t.Materials[i];
+            if (mr.Material != m)
+            {
+                mr.Material = m;
+                mr.Row.SetLabel(m.Name);
+            }
+            string state = m.StateLabel();
+            if (state != mr.LastState)
+            {
+                mr.LastState = state;
+                mr.Row.SetState(state);
+            }
+            bool picked = m == selMaterial;
+            if (mr.Row.Selected != picked) kit.PaintRow(mr.Row, picked);
+        }
+        return changed;
+    }
+
+    void MakeMaterialRow(int index)
+    {
+        MaterialRow mr = new MaterialRow();
+        int slot = index;
+        mr.Row = kit.RackRow("material_" + index, "", null, null, delegate (string id) { PickRow(slot); });
+        materialRows.Add(mr);
+    }
+
+    void PickRow(int slot)
+    {
+        Row r = selRow;
+        Tree t = r != null ? r.Tree : null;
+        if (t == null || slot >= t.Materials.Count) return;
+        LeafMaterial m = t.Materials[slot];
+        if (m == selMaterial) return;
+        selMaterial = m;
+        pushedLook = null;
+        r.LastMaterial = m.Name;
+        Sync(life);
     }
 
     // Binds the editor's Enabled to a tree's proxy. VaM moves the toggle's
@@ -545,6 +620,27 @@ sealed class TreesPanel
         return lineText;
     }
 
+    // What the mode makes of the material, from the mode itself rather than
+    // from the copy the next frame makes, so a click on the strip is answered
+    // at once. Wind, falling leaves and every part of the look but Tint work
+    // on the converted leaf only, which is what this says when the material
+    // stays as it is.
+    string ModeLine()
+    {
+        LeafMaterial m = selMaterial;
+        Tree t = selRow != null ? selRow.Tree : null;
+        if (m == null || m.Look == null || t == null || life == null) return "";
+        if (!m.WantsLeaf(true))
+        {
+            if (m.Look.Mode == FoliageFXConfig.ModeKeep) return "Kept as the asset made it, so " + TintOnly;
+            return "Auto leaves it as the asset made it, so " + TintOnly;
+        }
+        if (!life.Master) return "Converted once FoliageFX is enabled on the Overview.";
+        if (!t.Enabled) return "Converted once this tree is enabled.";
+        if (life.ShadowFix != null && !life.ShadowFix.Enabled.val) return "Converted once Shadow Fix is switched on, on the Effects page.";
+        return "Converted: shadows, Wind, Falling Leaves and the whole look below apply to it.";
+    }
+
     string FallingLine()
     {
         LeafMaterial m = selMaterial;
@@ -563,18 +659,28 @@ sealed class TreesPanel
         hue.valNoCallback = look.Hue;
         saturation.valNoCallback = look.Saturation;
         brightness.valNoCallback = look.Brightness;
-        smoothness.valNoCallback = look.Smoothness;
+        gloss.valNoCallback = look.Smoothness;
         cutoff.valNoCallback = look.Cutoff;
         translucency.valNoCallback = look.Translucency;
         doubleSided.valNoCallback = look.DoubleSided;
         dropLeaves.valNoCallback = look.Falling;
         pushing = false;
+        if (modeStrip != null) modeStrip.Repaint();
     }
 
     void FloatChanged(float value) { Changed(); }
     void BoolChanged(bool value) { Changed(); }
     void ModeChanged(string value) { Changed(); }
     void TintChanged(float h, float s, float v) { Changed(); }
+
+    // The strip wrote the mode into the look already (ModeChanged): the rest
+    // of the look shows or hides, and the line under the strip says what the
+    // mode does, before the next frame converts or restores the material.
+    void AfterModePick()
+    {
+        Sync(life);
+        kit.RefreshLiveLines();
+    }
 
     // Every control writes the whole look: one path for all of them, and no
     // allocation while a slider is dragged.
@@ -597,7 +703,7 @@ sealed class TreesPanel
         look.Hue = hue.val;
         look.Saturation = saturation.val;
         look.Brightness = brightness.val;
-        look.Smoothness = smoothness.val;
+        look.Smoothness = gloss.val;
         look.Cutoff = cutoff.val;
         look.Translucency = translucency.val;
         look.DoubleSided = doubleSided.val;
@@ -606,81 +712,7 @@ sealed class TreesPanel
         life.Touch(t);
     }
 
-    void MaterialChanged(string name)
-    {
-        if (pushing || log == null) return;
-        log.Run("pick a material", delegate
-        {
-            Row r = selRow;
-            if (r == null || r.Tree == null) return;
-            LeafMaterial m = FindMaterial(r.Tree, name);
-            if (m == null) return;
-            selMaterial = m;
-            pushedLook = null;
-            r.LastMaterial = m.Name;
-            Sync(life);
-        });
-    }
-
     // ---- buttons ----
-
-    void ResetMaterial()
-    {
-        LeafMaterial m = selMaterial;
-        Tree t = selRow != null ? selRow.Tree : null;
-        if (m == null || m.Look == null || t == null) return;
-        m.Look.Reset(m.Source);
-        Push(m.Look);
-        life.Touch(t);
-    }
-
-    // Every converted material of this tree takes the look; each keeps its
-    // own mode, so nothing is converted or given back by the copy.
-    void CopyToTree()
-    {
-        LeafMaterial m = selMaterial;
-        Tree t = selRow != null ? selRow.Tree : null;
-        if (m == null || m.Look == null || t == null) return;
-        int n = 0;
-        for (int i = 0; i < t.Materials.Count; i++)
-        {
-            LeafMaterial o = t.Materials[i];
-            if (o == m || o.Foreign || o.Look == null || !o.Converted) continue;
-            o.Look.CopyFrom(m.Look, false);
-            n++;
-        }
-        life.Touch(t);
-        if (n == 0) log.Info("No other converted material on " + t.Uid + " to copy the look of " + m.Name + " to.");
-        else log.Info("Copied the look of " + m.Name + " to " + n + (n == 1 ? " converted material" : " converted materials") + " on " + t.Uid + ".");
-    }
-
-    // The material of this name on every tree takes the look, its mode
-    // included: the same asset placed twice is meant to look the same.
-    void CopyEverywhere()
-    {
-        LeafMaterial m = selMaterial;
-        if (m == null || m.Look == null) return;
-        List<Tree> trees = life.Trees.Trees;
-        int n = 0;
-        for (int i = 0; i < trees.Count; i++)
-        {
-            Tree o = trees[i];
-            if (o == null || o.Yielded) continue;
-            bool any = false;
-            for (int k = 0; k < o.Materials.Count; k++)
-            {
-                LeafMaterial x = o.Materials[k];
-                if (x == m || x.Foreign || x.Look == null || x.Name != m.Name) continue;
-                x.Look.CopyFrom(m.Look, true);
-                any = true;
-            }
-            if (!any) continue;
-            life.Touch(o);
-            n++;
-        }
-        if (n == 0) log.Info("No other tree has a material named " + m.Name + ".");
-        else log.Info("Copied the look of " + m.Name + " to " + n + (n == 1 ? " other tree." : " other trees."));
-    }
 
     // The whole tree: every look back to its source's defaults, and the tree
     // switched on.
@@ -698,6 +730,7 @@ sealed class TreesPanel
         if (!r.Proxy.val) r.Proxy.valNoCallback = true;
         life.Touch(t);
         if (selMaterial != null && selMaterial.Look != null) Push(selMaterial.Look);
+        Sync(life);
     }
 
     static string Capitalize(string s)

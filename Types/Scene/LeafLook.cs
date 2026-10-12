@@ -53,23 +53,6 @@ sealed class LeafLook
         Customized = false;
     }
 
-    // A copied look is the user's choice for the target, so it saves.
-    public void CopyFrom(LeafLook other, bool includeMode)
-    {
-        if (other == null) return;
-        if (includeMode) Mode = other.Mode;
-        Tint = other.Tint;
-        Hue = other.Hue;
-        Saturation = other.Saturation;
-        Brightness = other.Brightness;
-        Cutoff = other.Cutoff;
-        Smoothness = other.Smoothness;
-        Translucency = other.Translucency;
-        DoubleSided = other.DoubleSided;
-        Falling = other.Falling;
-        Customized = true;
-    }
-
     public bool Tinted
     {
         get { return Tint.S > 0.001f || Tint.V < 0.999f; }

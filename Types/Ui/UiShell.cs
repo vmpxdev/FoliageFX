@@ -462,7 +462,7 @@ sealed class UiShell
         if (host != null) host.Size();
         Refresh();
         // When what is shown changes (a new panel, a selection, Advanced,
-        // Experimental, or Technical Info), lay out and fit the wrapped text in
+        // Experimental, or Show Hints), lay out and fit the wrapped text in
         // the same frame so a box never flashes at its estimated height before
         // the slow tick can measure it. Gated on a real change, never per tick.
         string sig = ShownSignature(cat, selected, painting);
@@ -476,16 +476,14 @@ sealed class UiShell
 
     // A cheap fingerprint of what the panel shows, so Apply tells a real
     // change (which needs a synchronous re-fit) from an idempotent re-assert:
-    // the category, the open feature and its Advanced state, Technical Info
-    // (it lengthens captions), paint mode, and which features are hidden
-    // (Experimental).
+    // the category, the open feature and its Advanced state, Show Hints,
+    // paint mode, and which features are hidden (Experimental).
     string ShownSignature(string cat, FeatureView selected, bool painting)
     {
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
         sb.Append(cat).Append('|');
         sb.Append(selected != null ? selected.Id : "-").Append('|');
         sb.Append(selected != null && selected.AdvancedOpen != null && selected.AdvancedOpen.val ? '1' : '0');
-        sb.Append(FoliageFXConfig.TechnicalInfo ? 'T' : 't');
         sb.Append(FoliageFXConfig.ShowHints ? 'H' : 'h');
         sb.Append(painting ? 'P' : 'p').Append('|');
         for (int i = 0; i < features.Count; i++) sb.Append(features[i].Hidden ? '0' : '1');

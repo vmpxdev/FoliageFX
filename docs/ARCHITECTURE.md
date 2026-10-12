@@ -34,7 +34,7 @@ Effects, in order. Effects never reference each other; what one needs of another
 | `ParamSet` | the parameter registry: every storable as a `ParamEntry` with its feature id, scope and key; write, read and reset by scope and feature; `NonDefault` for Diagnose |
 | `SaveHistory` | what each release adds to saved data, one `SaveLine` (release, kind, key) per key (none for version 1); `Current()` |
 | `Settings` | the scene block, its schema stamp and migration |
-| `Lifecycle` | the master, the per-frame poll of the effects' values, the scan tick, the effect order, release, timing |
+| `Lifecycle` | the master, the per-frame poll of the effects' values, the scan tick, the effect order, release |
 
 ## 3. Scene
 
@@ -44,7 +44,7 @@ Effects, in order. Effects never reference each other; what one needs of another
 | `LeafLook` | one material's settings (mode, tint, hue, saturation, brightness, cutoff, smoothness, translucency, double-sided, falling) and their JSON |
 | `TreeLooks` | every tree's looks by tree key and material name, and each tree's switch: the scene's `trees` node |
 | `LeafMaterial` | one source material on a tree: its verdict, its look, its kind (original, leaf, tint), the renderer slots it holds, and what the effects own on it (`Copy`, `FallingMaterial`, `Emitter`); `Assign` writes a material into every slot, `Restore` puts the source back where the copy still is |
-| `Tree` | one CustomUnityAsset atom: its loader (hooked, so a loaded or cleared asset marks it dirty), its materials gathered from the loader's MeshRenderers and SkinnedMeshRenderers, its ground, kept as an offset from the loader so that falling leaves made after the tree is moved land at the moved height |
+| `Tree` | one CustomUnityAsset atom: its loader (hooked, so a loaded or cleared asset marks it dirty), its materials gathered from the loader's MeshRenderers and SkinnedMeshRenderers, its ground, kept as an offset from the loader so that falling leaves made after the tree is moved land at the moved height; the loaded asset's own name for the tree editor (`AssetName`), read again when the loader loads or clears an asset |
 | `TreeRegistry` | finds the trees, decides precedence and scope, runs the scan, follows renames |
 | `LeafShader` | `FoliageFX.assetbundle` and its one shader, `Vampix Collections/FoliageFX/Leaves` |
 
@@ -63,16 +63,17 @@ Effects, in order. Effects never reference each other; what one needs of another
 | Class | Role |
 |---|---|
 | `UiHost` | the two columns inside VaM's full-width area (Live Skin's) |
-| `UiKit` | the control factory and palette; `RackRow` with `SetBadge`, live lines, hint boxes, the scroll box, `Wire` error boundaries |
+| `UiKit` | the control factory and palette; `RackRow` with `SetBadge` and `SetLabel` (a pooled row's label), live lines, hint boxes, the scroll box, `Wire` error boundaries |
 | `UiShell` | categories, racks, feature selection, inspector building, `Attach` after VaM rebuilds the panel, `OnApplied` after each `Apply` |
-| `FeatureView` | one rack row, its inspector bags, state, caption and cost delegates, guide sentence, conditional groups |
-| `ConfirmBox` | the branded modal; `InformRows` for the Full Changelog |
+| `FeatureView` | one rack row, its inspector bags, state and caption delegates, guide sentence, conditional groups |
+| `ConfirmBox` | the branded modal; `InformRows` for the Full Changelog; its backdrop and card take clicks through `ModalClick`, not a Button, so only its real buttons are Selectables |
 | `ReportRow` | one row of that modal |
 | `SmoothScroll` | eased wheel scrolling (the What's New box, the modal) |
 | `Diagnostics` | the Diagnose report: to the Message Log, the clipboard, and a file in `DiagnosticsFolder` |
-| `TestingPanel` | Technical Info and Show Hints |
+| `TestingPanel` | Show Hints |
 | `OverviewPanel` | identity card, What's New, the Diagnostics card, the dashboard of trees and effects |
-| `TreesPanel` | the live tree rack and the tree editor |
+| `ChoiceStrip` | a row of buttons standing in for a chooser (a material's Mode), Live Skin's |
+| `TreesPanel` | the live tree rack, the selected tree's materials list, and the tree editor |
 | `EffectsPanel` | the three effect inspectors |
 
 ## 6. Ownership
@@ -128,7 +129,7 @@ for each tree with Dirty (every tree after TouchAll or a change found above):
     ShadowFix.ApplyTree(tree, shader, msaa)
     Wind.Apply(material)           for each material
     Falling.ApplyTree(tree, host, shader, wind, msaa, softEdges)
-each step in log.RunOnce; each effect's steps timed into its cost average and peak
+each step in log.RunOnce
 ```
 
 `Touch(tree)` marks one tree for the next Update (an edit in the tree editor, a row's
@@ -146,7 +147,7 @@ as a session plugin, the switch is hidden and ignored, so a trigger setting it c
 nothing, and every CustomUnityAsset is looked after); then `Diagnostics`, the leaf shader
 request, `BuildUi`, the master (`SetMaster` from `Enabled`), the rename hook, and
 `AttachSoon`. `Update` runs `Lifecycle.Update`, then the UI tick every `UiRefreshSeconds`
-(0.5 s), `RefreshUI`: `shell.Attach`, the switches (Technical Info and Show Hints),
+(0.5 s), `RefreshUI`: `shell.Attach`, Show Hints,
 `shell.Apply`, whose `OnApplied` runs the Trees page's sync (it creates rows for new trees
 and hands them to the dashboard), then the Overview's refresh while it is the shown page.
 `OnDisable` holds (everything released), `OnEnable` resumes, `OnDestroy` releases and lets
@@ -236,7 +237,7 @@ FoliageFX/
     Core/                   BuildInfo Changelog FoliageFXConfig Lifecycle OverlayLog ParamSet PluginFiles SaveHistory Settings
     Scene/                  LeafLook LeafMaterial LeafRules LeafShader Tree TreeLooks TreeRegistry
     Effects/                FallingLeaves LeafEmitter LeafSprites ShadowFix Wind
-    Ui/                     ConfirmBox Diagnostics EffectsPanel FeatureView OverviewPanel ReportRow SmoothScroll TestingPanel TreesPanel UiHost UiKit UiShell
+    Ui/                     ChoiceStrip ConfirmBox Diagnostics EffectsPanel FeatureView OverviewPanel ReportRow SmoothScroll TestingPanel TreesPanel UiHost UiKit UiShell
     FoliageFX.cs            facade
   shader/                   Leaves.shader, Editor_BuildFoliageFXBundle.cs, bundle.sources (docs/SHADER_BUILD.md)
   tools/                    setup.ps1 lint.ps1 compile.ps1 bundle.ps1 build-info.ps1 pack.ps1, hooks/, Strip/

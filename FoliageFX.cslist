@@ -26,6 +26,7 @@ Types/Ui/ReportRow.cs
 Types/Ui/ConfirmBox.cs
 Types/Ui/FeatureView.cs
 Types/Ui/UiShell.cs
+Types/Ui/ChoiceStrip.cs
 Types/Ui/Diagnostics.cs
 Types/Ui/TestingPanel.cs
 Types/Ui/OverviewPanel.cs
